@@ -215,11 +215,10 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
           <Link href="/" className="flex items-center">
       <Image 
                   src={theme === 'dark' ? '/logo-dark.png' : '/logo-light.png'} 
-                  width={40} 
-                  height={40} 
-                  alt="OrganizAPP Logo" 
+                  width={130} 
+                  height={44} 
+                  alt="OrganizAPP by SAIA LABS" 
                 />
-                <span className="text-lg">OrganizAPP</span>
                 </Link>
 
                 </div>

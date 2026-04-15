@@ -112,16 +112,7 @@ export default function SharePage({ params }: { params: { token: string } }) {
             />
           </div>
           <div className="mt-4 text-center flex justify-center text-muted-foreground items-center text-xs px-4 pb-4">
-            This board is view only. Built with <Link href="/" className="flex items-center">
-              <div className=" flex items-center">
-                <Image 
-                  src={theme === 'light' ? '/logo-light.png' : '/logo-dark.png'} 
-                  width={30} 
-                  height={30} 
-                  alt="Kanba Logo" 
-                />
-              </div>
-             <span className="font-semibold">Kanba.</span></Link>
+            Este tablero es de solo lectura &mdash; OrganizAPP by <span className="font-semibold ml-1">SAIA LABS</span>
           </div>
         </div>
       </div>
