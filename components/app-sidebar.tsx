@@ -215,13 +215,11 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
           <Link href="/" className="flex items-center">
       <Image 
                   src={theme === 'dark' ? '/logo-dark.png' : '/logo-light.png'} 
-                  width={40} 
-                  height={40} 
-                  alt="Kanba Logo" 
+                  width={130} 
+                  height={44} 
+                  alt="OrganizAPP by SAIA LABS" 
                 />
-                <span className="text-lg">Kanba</span>
                 </Link>
-                <Badge variant="outline" className="text-xs text-gray-500 border border-gray-200 dark:border-gray-700 dark:text-gray-400 rounded-full">Beta</Badge>
 
                 </div>
       </SidebarHeader>
