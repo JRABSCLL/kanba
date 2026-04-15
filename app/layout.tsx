@@ -10,8 +10,16 @@ import Script from 'next/script'
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Kanba - Open-source Project Management Tool',
-  description: 'Project Management Reimagined for Builders',
+  title: 'OrganizAPP - Sistema de Gestión de Proyectos',
+  description: 'Sistema de gestión de proyectos interno by SAIA LABS',
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: {
+      index: false,
+      follow: false,
+    },
+  },
 };
 
 export default function RootLayout({
@@ -24,7 +32,7 @@ export default function RootLayout({
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="description" content="Project Management Reimagined for Builders" />
+        <meta name="description" content="Sistema de gestión de proyectos interno by SAIA LABS" />
 
         {/* Icons */}
         <link rel="icon" href="/favicon.ico" />
@@ -32,30 +40,19 @@ export default function RootLayout({
         <link rel="icon" href="/icon-white.png" media="(prefers-color-scheme: dark)" />
         <link rel="apple-touch-icon" href="/apple-icon.png" />
 
+        {/* No indexing */}
+        <meta name="robots" content="noindex, nofollow" />
+        <meta name="googlebot" content="noindex, nofollow" />
+
         {/* Open Graph */}
-        <meta property="og:title" content="Kanba - Open-source Project Management Tool" />
-        <meta property="og:description" content="Project Management Reimagined for Builders" />
-        <meta property="og:url" content="https://kanba.co" />
-        <meta property="og:site_name" content="Kanba" />
-        <meta property="og:image" content="https://kanba.co/og-image.png" />
-        <meta property="og:image:width" content="1200" />
-        <meta property="og:image:height" content="630" />
-        <meta property="og:image:alt" content="Kanba - Open-source Project Management Tool" />
-        <meta property="og:locale" content="en_US" />
+        <meta property="og:title" content="OrganizAPP by SAIA LABS" />
+        <meta property="og:description" content="Sistema de gestión de proyectos interno by SAIA LABS" />
+        <meta property="og:site_name" content="OrganizAPP" />
+        <meta property="og:locale" content="es_ES" />
         <meta property="og:type" content="website" />
 
-        {/* Twitter */}
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Kanba - Open-source Project Management Tool" />
-        <meta name="twitter:description" content="Project Management Reimagined for Builders" />
-        <meta name="twitter:image" content="https://kanba.co/og-image.png" />
-
-        {/* SEO */}
-        <meta name="robots" content="index, follow" />
-        <meta name="googlebot" content="index, follow, max-video-preview:-1, max-image-preview:large, max-snippet:-1" />
-        <meta name="keywords" content="kanban, project management, task management, productivity, open source, builders, developers" />
-        <meta name="author" content="Kanba Team" />
-        <meta name="category" content="Productivity" />
+        {/* Author */}
+        <meta name="author" content="SAIA LABS" />
 
         {/* Web App Manifest */}
         <link rel="manifest" href="/web-app-manifest-512x512.png" />

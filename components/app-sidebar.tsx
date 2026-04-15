@@ -217,11 +217,10 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
                   src={theme === 'dark' ? '/logo-dark.png' : '/logo-light.png'} 
                   width={40} 
                   height={40} 
-                  alt="Kanba Logo" 
+                  alt="OrganizAPP Logo" 
                 />
-                <span className="text-lg">Kanba</span>
+                <span className="text-lg">OrganizAPP</span>
                 </Link>
-                <Badge variant="outline" className="text-xs text-gray-500 border border-gray-200 dark:border-gray-700 dark:text-gray-400 rounded-full">Beta</Badge>
 
                 </div>
       </SidebarHeader>

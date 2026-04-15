@@ -103,12 +103,12 @@ export default function LoginPage() {
                   src={theme === 'light' ? '/logo-light.png' : '/logo-dark.png'} 
                   width={50} 
                   height={50} 
-                  alt="Kanba Logo" 
+                  alt="OrganizAPP Logo" 
                 />
               </div>
-          <CardTitle className="text-2xl">Welcome back</CardTitle>
+          <CardTitle className="text-2xl">Bienvenido de nuevo</CardTitle>
           <CardDescription>
-            Sign in to your Kanba account
+            Inicia sesión en OrganizAPP by SAIA LABS
           </CardDescription>
         </CardHeader>
         <CardContent>

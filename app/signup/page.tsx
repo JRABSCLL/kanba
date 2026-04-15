@@ -108,12 +108,12 @@ export default function SignUpPage() {
                   src={theme === 'light' ? '/logo-light.png' : '/logo-dark.png'} 
                   width={50} 
                   height={50} 
-                  alt="Kanba Logo" 
+                  alt="OrganizAPP Logo" 
                 />
               </div>
-          <CardTitle className="text-2xl">Welcome to Kanba</CardTitle>
+          <CardTitle className="text-2xl">Solicitar acceso</CardTitle>
           <CardDescription>
-            Create your account and get started with Kanba today
+            Crea tu cuenta en OrganizAPP by SAIA LABS
           </CardDescription>
         </CardHeader>
         <CardContent>
