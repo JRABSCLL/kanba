@@ -3,7 +3,7 @@ import { useEffect, useState } from "react"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { useUser } from "@/components/user-provider"
-import { useRouter, usePathname } from "next/navigation"
+import { useRouter } from "next/navigation"
 
 export default function DashboardLayout({
   children,
@@ -12,7 +12,6 @@ export default function DashboardLayout({
 }) {
   const { user, signOut } = useUser()
   const router = useRouter()
-  const pathname = usePathname()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -27,13 +26,10 @@ export default function DashboardLayout({
     }
   }, [mounted, user, router])
 
-  // Admin route guard: only role === 'admin' can access /dashboard/admin/*
-  useEffect(() => {
-    if (!mounted || !user) return
-    if (pathname?.startsWith("/dashboard/admin") && user.role !== "admin") {
-      router.replace("/dashboard")
-    }
-  }, [mounted, user, pathname, router])
+  // NOTA: el gate de admin NO vive aquí — lo maneja la propia página
+  // app/dashboard/admin/users/page.tsx, que respeta el estado `loading` del
+  // UserProvider y evita la race condition donde `user.role` todavía no ha
+  // cargado cuando este layout se ejecuta.
 
   const handleSignOut = () => {
     router.push("/")

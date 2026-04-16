@@ -1,7 +1,15 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-04-16
-**Versión actual:** v0.4.1 — Fix de recursión infinita en RLS
+**Versión actual:** v0.4.2 — Fix de race condition en gate de admin
+
+## Cambios v0.4.2 (hotfix)
+
+**Bug descubierto:** al hacer click en el link "Admin" del sidebar, a veces redirigía de vuelta al dashboard — especialmente justo después de login o al recargar la página estando en `/dashboard/admin/users`. Era una **race condition**: el `app/dashboard/layout.tsx` tenía un `useEffect` que chequeaba `user.role !== "admin"` antes de que el `UserProvider` terminara de fetchear el profile desde Supabase. En ese instante `user.role` era `undefined`, el gate del layout evaluaba "no es admin" y redirigía.
+
+**Solución aplicada:** se eliminó el gate de admin del `dashboard/layout.tsx` (también se removió el import/uso de `usePathname` que quedó sin uso). El único gate queda en `app/dashboard/admin/users/page.tsx`, que respeta correctamente el estado `loading` del `UserProvider` — muestra un spinner hasta que `user.role` esté definido, y solo entonces evalúa si redirigir. El layout sigue protegiendo usuarios no autenticados (→ login) y pending/rejected (→ `/pending`).
+
+**Lección aprendida:** los guards que dependen de datos asíncronos (como campos del profile cargados después del auth) deben vivir en componentes que tengan acceso al estado `loading` del contexto y esperen a que los datos estén disponibles. Nunca ponerlos en layouts que se renderizan antes de que el fetch termine.
 
 ## Cambios v0.4.1 (hotfix)
 
