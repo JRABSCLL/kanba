@@ -260,7 +260,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
 
       if (!existingUser) {
         toast.error(
-          `No user found with email "${inviteEmail}". They need to create a Kanban account first.`,
+          `No se encontró ningún usuario aprobado con el email "${inviteEmail}". El usuario debe registrarse en OrganizAPP y ser aprobado por un administrador antes de poder ser invitado a proyectos.`,
           {
             description: 'Ask them to sign up first, then try adding them again.',
             duration: 6000,
@@ -426,7 +426,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
                   <DialogHeader>
                     <DialogTitle>Invite Team Member</DialogTitle>
                     <DialogDescription>
-                      Search for existing Kanba users by email to add them to your project.
+                      Busca usuarios aprobados de OrganizAPP por email o nombre para agregarlos a tu proyecto.
                     </DialogDescription>
                   </DialogHeader>
                   <form onSubmit={handleInviteMember} className="space-y-4">
@@ -497,7 +497,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
                             <div>
                               <p className="text-sm font-medium">No users found</p>
                               <p className="text-xs">
-                                The person needs to create a Kanba account first.
+                                La persona debe tener una cuenta aprobada en OrganizAPP.
                               </p>
                             </div>
                           </div>
@@ -505,7 +505,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
                       )}
 
                       <p className="text-xs text-muted-foreground">
-                        Only users who already have Kanba accounts can be added to projects.
+                        Solo los usuarios aprobados en OrganizAPP pueden ser agregados a proyectos.
                       </p>
                     </div>
                     
