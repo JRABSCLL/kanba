@@ -10,21 +10,35 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { user, signOut } = useUser()
+  const { user, loading, signOut } = useUser()
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
+    console.log("[v0] DashboardLayout: mounted")
   }, [])
 
-  // Approval guard: send pending / rejected users to /pending
+  // AUTH GATE: si NO estamos cargando y NO hay usuario → login.
+  // Antes el layout mostraba spinner eterno si `user` era null, incluso cuando
+  // la sesión ya estaba definitivamente expirada o no iniciada.
   useEffect(() => {
-    if (!mounted || !user) return
+    if (!mounted) return
+    if (loading) return
+    if (!user) {
+      console.log("[v0] DashboardLayout: no user & not loading → redirecting to /login")
+      router.replace("/login")
+    }
+  }, [mounted, loading, user, router])
+
+  // APPROVAL GATE: send pending / rejected users to /pending
+  useEffect(() => {
+    if (!mounted || loading || !user) return
     if (user.status && user.status !== "approved") {
+      console.log("[v0] DashboardLayout: user status =", user.status, "→ redirecting to /pending")
       router.replace("/pending")
     }
-  }, [mounted, user, router])
+  }, [mounted, loading, user, router])
 
   // NOTA: el gate de admin NO vive aquí — lo maneja la propia página
   // app/dashboard/admin/users/page.tsx, que respeta el estado `loading` del
@@ -44,15 +58,34 @@ export default function DashboardLayout({
 
   if (!mounted) return null
 
-  if (!user) {
+  // Mientras el UserProvider carga la sesión inicial.
+  // El UserProvider tiene un safety timeout de 10s, así que este spinner
+  // NUNCA puede quedarse indefinidamente.
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen w-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <p className="text-sm text-muted-foreground">Cargando sesión...</p>
+        </div>
       </div>
     )
   }
 
-  // Still loading the profile data - show spinner rather than flashing content
+  // No hay usuario y ya terminó de cargar → el useEffect de arriba lo manda a /login.
+  // Mientras redirect, mostrar algo mínimo para no pintar UI huérfana.
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen w-full">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <p className="text-sm text-muted-foreground">Redirigiendo al login...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Usuario pendiente/rechazado → el useEffect de arriba lo manda a /pending.
   if (user.status && user.status !== "approved") {
     return (
       <div className="flex items-center justify-center min-h-screen w-full">

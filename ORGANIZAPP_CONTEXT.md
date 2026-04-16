@@ -1,7 +1,38 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-04-16
-**Versión actual:** v0.4.4 — Fix de Realtime zombie en notificaciones (tab idle)
+**Versión actual:** v0.4.5 — Fix definitivo de loading infinito al cargar la app
+
+## Cambios v0.4.5 (hotfix crítico)
+
+**Bug persistente:** incluso tras los fixes v0.4.4, al entrar directamente a la URL de producción o volver después de minutos sin interactuar, la app se quedaba en **loading infinito sin errores en consola**. Ocurría en distintos dispositivos.
+
+**Causa raíz (tres bugs encadenados):**
+
+1. **`UserProvider` usaba `supabase.auth.getUser()`** — este método hace una **llamada HTTP** a Supabase para validar el token. En redes lentas/inestables, el `await` quedaba pendiente indefinidamente **sin lanzar error**. El hang silencioso explicaba la ausencia de errores en consola.
+2. **`setLoading(false)` solo se ejecutaba si había un `authUser`** — si la sesión expiraba o `getUser()` colgaba, `loading` quedaba `true` para siempre. El `finally` solo tocaba `initialized`, no `loading`.
+3. **El `dashboard/layout.tsx` mostraba spinner eterno cuando `user` era `null`** — no redirigía al login. Si la sesión caía, el usuario veía spinner para siempre sin opción de recuperarse.
+
+**Solución aplicada en `components/user-provider.tsx`:**
+- Reemplazado `getUser()` por `getSession()`: lee el token de localStorage instantáneamente, sin red. Elimina el 99% de los hangs.
+- `loadProfileForUser` envuelto en `Promise.race` con timeout de **8 segundos** — si el query a `profiles` tarda más, devuelve el user base sin profile y sigue adelante.
+- **Safety timeout de 10 segundos** en el `useEffect` principal — si algo falla catastróficamente, `loading` se fuerza a `false` para que el usuario pueda recuperarse o ir al login.
+- El bloque `finally` del init ahora **siempre** ejecuta `setLoading(false)`, independiente del resultado.
+- `mountedRef` para prevenir `setState` en componentes desmontados.
+- Logs `[v0]` estratégicos en cada fase clave (mount, getSession, loadProfile, onAuthStateChange, safety timeout, finally, unmount) para debugging.
+- El método público sigue llamándose `refreshProfile()` para no romper otros consumidores.
+
+**Solución aplicada en `app/dashboard/layout.tsx`:**
+- Nuevo `useEffect` que detecta **`!loading && !user`** → `router.replace("/login")`. Nunca más hay spinner eterno; si la sesión no existe, el usuario va al login.
+- El spinner de carga ahora distingue tres estados: "Cargando sesión...", "Redirigiendo al login...", pending/rejected.
+- Logs `[v0]` en cada gate para rastrear qué decisión está tomando el layout.
+
+**Cómo verificar que funciona:**
+1. Abrir la consola del navegador y recargar la página — deberías ver: `UserProvider: mount → init → getSession → session is present/null → loadProfileForUser → finally - loading=false`.
+2. Si la red está muerta, el safety timeout dispara y `loading=false` fuerza, redirigiendo al login en lugar de colgar.
+3. Si la sesión está expirada, `onAuthStateChange` recibe `SIGNED_OUT` y el layout redirige automáticamente.
+
+**Lección aprendida:** siempre usar `getSession()` en el init del auth provider, nunca `getUser()`. Usar `Promise.race` con timeouts para cualquier fetch en el path crítico de carga inicial. Siempre tener un safety timeout como última línea de defensa contra hangs silenciosos. Y siempre redirigir, nunca mostrar spinner eterno, cuando se detecta estado definitivo de "sin sesión".
 
 ## Cambios v0.4.4 (hotfix)
 
