@@ -1,7 +1,18 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-04-16
-**Versión actual:** v0.4 — Remoción total de UI de billing/subscription
+**Versión actual:** v0.4.1 — Fix de recursión infinita en RLS
+
+## Cambios v0.4.1 (hotfix)
+
+**Bug descubierto:** las policies `profiles_admin_select` y `profiles_admin_update` de v0.3 causaban **recursión infinita** — su condición `EXISTS (SELECT FROM profiles WHERE role='admin')` consultaba la misma tabla que intentaban proteger, y Postgres no podía resolverla. Resultado: cualquier `SELECT FROM profiles` fallaba con `42P17: infinite recursion detected in policy for relation "profiles"`, rompiendo el `UserProvider`, la carga de proyectos, y el link de Admin en el sidebar (nunca se renderizaba porque `user.role` nunca cargaba).
+
+**Solución aplicada:**
+- Se creó la función `public.is_approved_admin(uid uuid)` con `SECURITY DEFINER` y `search_path = public`. Esta función se ejecuta con privilegios del owner y bypasea RLS al consultar internamente `profiles` — rompe la recursión.
+- Las policies `profiles_admin_select` y `profiles_admin_update` se recrearon usando `is_approved_admin(auth.uid())` en lugar del `EXISTS` recursivo.
+- Grant de `EXECUTE` otorgado a `authenticated`.
+
+**Lección aprendida:** cualquier policy sobre una tabla que necesite consultar esa misma tabla debe ir a través de una función `SECURITY DEFINER`. Es el patrón estándar de Supabase.
 
 ## Cambios v0.4
 
