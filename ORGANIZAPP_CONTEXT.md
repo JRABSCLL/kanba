@@ -1,7 +1,43 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-04-16
-**Versión actual:** v0.4.2 — Fix de race condition en gate de admin
+**Versión actual:** v0.4.4 — Fix de Realtime zombie en notificaciones (tab idle)
+
+## Cambios v0.4.4 (hotfix)
+
+**Bug descubierto:** si dejabas la app abierta sin interactuar durante ~10 minutos y luego hacías click en cualquier módulo (proyectos, kanban, etc.), la pantalla se quedaba en blanco con loading infinito. No aparecía error en consola.
+
+**Causa raíz:** el componente `components/notifications.tsx` mantenía abierto un WebSocket de Supabase Realtime para escuchar cambios en la tabla `notifications`. Cuando la tab quedaba idle, los navegadores modernos (Chrome/Edge/Firefox) **suspenden WebSockets en background** para ahorrar recursos. Al regresar, el WebSocket quedaba "zombie" — aparentemente vivo en el estado de React pero en realidad desconectado. Cualquier query posterior competía con el intento de reconexión automática del cliente de Supabase, y el cliente se quedaba bloqueado esperando un ACK que nunca llegaba. Resultado: loading infinito en toda la app.
+
+**Solución aplicada:**
+- Canal único por usuario: `notifications:${userId}` en lugar del canal compartido `notifications`, que causaba colisiones entre usuarios.
+- Se agrega manejo de 3 eventos del navegador:
+  - `visibilitychange` → al volver la tab, se destruye el canal viejo y se crea uno nuevo + refresh de datos.
+  - `online` → al recuperar conectividad, igual (destruir + recrear + refresh).
+  - `focus` → refresca datos cuando se vuelve al window (no recrea canal, menos agresivo).
+- El canal se guarda en un `useRef` para poder recrearlo sin disparar re-renders y limpiarlo correctamente en unmount.
+- Todos los `console.log` relevantes usan el prefijo `[v0]` para que aparezcan en los logs del preview y faciliten debugging futuro.
+
+**Lección aprendida:** WebSockets + tabs idle es una combinación peligrosa. Siempre que se use Supabase Realtime se debe implementar `visibilitychange` para detectar cuando la tab vuelve del fondo y recrear el canal. Sin eso, cualquier app con Realtime se rompe silenciosamente en sesiones largas.
+
+## Cambios v0.4.3 (hotfix)
+
+**Bug descubierto:** al abrir la pestaña "Team" dentro de un proyecto, la consola del navegador mostraba `PGRST205: Could not find the table 'public.project_members_with_profiles'`. Además, al buscar un email en el invitador, siempre devolvía el mensaje "No Kanba account" aunque el email sí existiera en la DB.
+
+**Causa raíz:** el componente `components/team-management.tsx` depende de tres objetos SQL que existían en `supabase/migrations/20250101000000_emergency_fix_profiles_security.sql` pero **nunca se aplicaron** a la DB de este proyecto:
+1. Vista `project_members_with_profiles` (usada para listar miembros con sus datos)
+2. Función RPC `search_users_for_collaboration(search_term)` (usada para buscar e invitar)
+3. Función RPC `get_profiles_count` (debug)
+
+Como las funciones RPC no existían, el cliente de Supabase devolvía `undefined` y el código interpretaba eso como "el usuario no existe".
+
+**Solución aplicada:**
+- Se creó la vista `project_members_with_profiles` como JOIN entre `project_members` y `profiles`. Hereda automáticamente el RLS de las tablas base.
+- Se recrearon ambas funciones RPC con `SECURITY DEFINER` y `search_path = public`. Ambas ahora filtran `status = 'approved'` — coherente con el sistema de aprobación de v0.3: **usuarios pendientes/rechazados no pueden ser invitados a proyectos**.
+- `search_users_for_collaboration` requiere mínimo 2 caracteres, busca por email exacto o parcial y por nombre, ordena por relevancia (match exacto primero) y limita a 10 resultados.
+- Se actualizaron los 4 textos en `team-management.tsx` que mencionaban "Kanba account" / "Kanba users" → ahora todos dicen "OrganizAPP" y aclaran que el usuario debe estar **aprobado** para ser invitado.
+
+**Lección aprendida:** cuando una migración original incluye vistas o RPCs, verificar en Supabase que se hayan aplicado antes de depurar la UI. El error no era del código sino de la DB.
 
 ## Cambios v0.4.2 (hotfix)
 

@@ -1,62 +1,80 @@
-"use client";
+"use client"
 
-import React, { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import React, { useState, useEffect, useRef, useCallback } from "react"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { supabase } from "@/lib/supabase";
-import { toast } from "sonner";
-import {
-  Bell,
-  BellRing,
-  Check,
-  CheckCheck,
-  User,
-  FolderOpen,
-  MessageSquare,
-  Calendar,
-  X,
-} from "lucide-react";
+} from "@/components/ui/dropdown-menu"
+import { supabase } from "@/lib/supabase"
+import { toast } from "sonner"
+import { Bell, BellRing, Check, CheckCheck, User, FolderOpen, MessageSquare, X } from "lucide-react"
+import type { RealtimeChannel } from "@supabase/supabase-js"
 
 interface Notification {
-  id: string;
-  type: "task_assigned" | "task_updated" | "project_invited" | "comment_added";
-  title: string;
-  message: string;
-  data: any;
-  read: boolean;
-  created_at: string;
+  id: string
+  type: "task_assigned" | "task_updated" | "project_invited" | "comment_added"
+  title: string
+  message: string
+  data: any
+  read: boolean
+  created_at: string
 }
 
 interface NotificationsProps {
-  userId: string;
+  userId: string
 }
 
 export function Notifications({ userId }: NotificationsProps) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [loading, setLoading] = useState(true)
+  const [unreadCount, setUnreadCount] = useState(0)
 
-  useEffect(() => {
-    loadNotifications();
+  // Keep the current channel in a ref so we can re-create it on reconnect
+  // without triggering React re-renders.
+  const channelRef = useRef<RealtimeChannel | null>(null)
 
-    // Set up real-time subscription for new notifications
-    const subscription = supabase
-      .channel("notifications")
+  const loadNotifications = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(20)
+
+      if (error) throw error
+
+      setNotifications(data || [])
+      setUnreadCount((data || []).filter((n) => !n.read).length)
+    } catch (error: any) {
+      console.error("[v0] Error loading notifications:", error)
+    } finally {
+      setLoading(false)
+    }
+  }, [userId])
+
+  // Create (or re-create) the realtime subscription. Idempotent: safely cleans
+  // up any previous channel before subscribing again.
+  const subscribeRealtime = useCallback(() => {
+    // Tear down existing channel if any (e.g. zombie after idle)
+    if (channelRef.current) {
+      try {
+        supabase.removeChannel(channelRef.current)
+      } catch (e) {
+        console.warn("[v0] Failed to remove stale channel:", e)
+      }
+      channelRef.current = null
+    }
+
+    // Use a user-specific channel name so multiple users don't collide on the
+    // same channel in Supabase Realtime.
+    const channel = supabase
+      .channel(`notifications:${userId}`)
       .on(
         "postgres_changes",
         {
@@ -66,53 +84,80 @@ export function Notifications({ userId }: NotificationsProps) {
           filter: `user_id=eq.${userId}`,
         },
         () => {
-          loadNotifications();
-        }
+          loadNotifications()
+        },
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Log transitions so we can debug idle/reconnect behaviour in the console
+        console.log("[v0] Notifications channel status:", status)
+      })
+
+    channelRef.current = channel
+  }, [userId, loadNotifications])
+
+  useEffect(() => {
+    if (!userId) return
+
+    // Initial load + initial subscription
+    loadNotifications()
+    subscribeRealtime()
+
+    // When the tab becomes visible again (after being in background / idle),
+    // the websocket may have been silently killed by the browser or the OS.
+    // We re-fetch the latest notifications and re-create the realtime channel.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        console.log("[v0] Tab visible again — refreshing notifications and reconnecting realtime")
+        loadNotifications()
+        subscribeRealtime()
+      }
+    }
+
+    // When the browser regains network connectivity, do the same dance.
+    const handleOnline = () => {
+      console.log("[v0] Browser back online — refreshing notifications and reconnecting realtime")
+      loadNotifications()
+      subscribeRealtime()
+    }
+
+    // When the window is focused again (e.g. switching between windows/apps),
+    // also re-sync. This catches cases visibilitychange misses.
+    const handleFocus = () => {
+      loadNotifications()
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("focus", handleFocus)
 
     return () => {
-      subscription.unsubscribe();
-    };
-  }, [userId]);
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("focus", handleFocus)
 
-  const loadNotifications = async () => {
-    try {
-      const { data: notifications, error } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(20);
-
-      if (error) throw error;
-
-      setNotifications(notifications || []);
-      setUnreadCount((notifications || []).filter((n) => !n.read).length);
-    } catch (error: any) {
-      console.error("Error loading notifications:", error);
-    } finally {
-      setLoading(false);
+      if (channelRef.current) {
+        try {
+          supabase.removeChannel(channelRef.current)
+        } catch (e) {
+          console.warn("[v0] Failed to remove channel on cleanup:", e)
+        }
+        channelRef.current = null
+      }
     }
-  };
+  }, [userId, loadNotifications, subscribeRealtime])
 
   const markAsRead = async (notificationId: string) => {
     try {
-      const { error } = await supabase
-        .from("notifications")
-        .update({ read: true })
-        .eq("id", notificationId);
+      const { error } = await supabase.from("notifications").update({ read: true }).eq("id", notificationId)
 
-      if (error) throw error;
+      if (error) throw error
 
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)))
+      setUnreadCount((prev) => Math.max(0, prev - 1))
     } catch (error: any) {
-      console.error("Error marking notification as read:", error);
+      console.error("[v0] Error marking notification as read:", error)
     }
-  };
+  }
 
   const markAllAsRead = async () => {
     try {
@@ -120,69 +165,65 @@ export function Notifications({ userId }: NotificationsProps) {
         .from("notifications")
         .update({ read: true })
         .eq("user_id", userId)
-        .eq("read", false);
+        .eq("read", false)
 
-      if (error) throw error;
+      if (error) throw error
 
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-      setUnreadCount(0);
-      toast.success("All notifications marked as read");
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+      setUnreadCount(0)
+      toast.success("All notifications marked as read")
     } catch (error: any) {
-      console.error("Error marking all as read:", error);
-      toast.error("Failed to mark all as read");
+      console.error("[v0] Error marking all as read:", error)
+      toast.error("Failed to mark all as read")
     }
-  };
+  }
 
   const deleteNotification = async (notificationId: string) => {
     try {
-      const { error } = await supabase
-        .from("notifications")
-        .delete()
-        .eq("id", notificationId);
+      const { error } = await supabase.from("notifications").delete().eq("id", notificationId)
 
-      if (error) throw error;
+      if (error) throw error
 
-      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+      setNotifications((prev) => prev.filter((n) => n.id !== notificationId))
       setUnreadCount((prev) => {
-        const notification = notifications.find((n) => n.id === notificationId);
-        return notification && !notification.read ? prev - 1 : prev;
-      });
+        const notification = notifications.find((n) => n.id === notificationId)
+        return notification && !notification.read ? prev - 1 : prev
+      })
     } catch (error: any) {
-      console.error("Error deleting notification:", error);
-      toast.error("Failed to delete notification");
+      console.error("[v0] Error deleting notification:", error)
+      toast.error("Failed to delete notification")
     }
-  };
+  }
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case "task_assigned":
-        return <User className="h-4 w-4 text-blue-500" />;
+        return <User className="h-4 w-4 text-blue-500" />
       case "project_invited":
-        return <FolderOpen className="h-4 w-4 text-green-500" />;
+        return <FolderOpen className="h-4 w-4 text-green-500" />
       case "comment_added":
-        return <MessageSquare className="h-4 w-4 text-purple-500" />;
+        return <MessageSquare className="h-4 w-4 text-purple-500" />
       default:
-        return <Bell className="h-4 w-4 text-gray-500" />;
+        return <Bell className="h-4 w-4 text-gray-500" />
     }
-  };
+  }
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
 
     if (diffInHours < 1) {
-      const diffInMinutes = Math.floor(diffInHours * 60);
-      return diffInMinutes <= 1 ? "Just now" : `${diffInMinutes}m ago`;
+      const diffInMinutes = Math.floor(diffInHours * 60)
+      return diffInMinutes <= 1 ? "Just now" : `${diffInMinutes}m ago`
     } else if (diffInHours < 24) {
-      return `${Math.floor(diffInHours)}h ago`;
+      return `${Math.floor(diffInHours)}h ago`
     } else if (diffInHours < 168) {
-      // 7 days
-      return `${Math.floor(diffInHours / 24)}d ago`;
+      return `${Math.floor(diffInHours / 24)}d ago`
     } else {
-      return date.toLocaleDateString();
+      return date.toLocaleDateString()
     }
-  };
+  }
 
   return (
     <DropdownMenu>
@@ -191,11 +232,7 @@ export function Notifications({ userId }: NotificationsProps) {
           size="xs"
           className="relative border-1 border-border bg-muted-foreground text-secondary hover:bg-primary/80"
         >
-          {unreadCount > 0 ? (
-            <BellRing className="h-4 w-4" />
-          ) : (
-            <Bell className="h-4 w-4" />
-          )}
+          {unreadCount > 0 ? <BellRing className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
           {unreadCount > 0 && (
             <Badge
               variant="destructive"
@@ -211,12 +248,7 @@ export function Notifications({ userId }: NotificationsProps) {
         <div className="flex items-center justify-between p-3">
           <h4 className="font-semibold">Notifications</h4>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={markAllAsRead}
-            disabled={unreadCount == 0}
-          >
+          <Button variant="outline" size="sm" onClick={markAllAsRead} disabled={unreadCount == 0}>
             <CheckCheck className="h-4 w-4 mr-1" />
             Mark all read
           </Button>
@@ -224,18 +256,12 @@ export function Notifications({ userId }: NotificationsProps) {
         <DropdownMenuSeparator />
 
         {loading ? (
-          <div className="p-4 text-center text-sm text-muted-foreground">
-            Loading notifications...
-          </div>
+          <div className="p-4 text-center text-sm text-muted-foreground">Loading notifications...</div>
         ) : notifications.length === 0 ? (
           <div className="p-6 text-center  text-gray-300">
             <Bell className="h-5 w-5 mx-auto mb-2 opacity-50" />
-            <h3 className="font-semibold text-gray-200 mb-2">
-              No notifications yet
-            </h3>
-            <p className="text-xs">
-              You&apos;ll see updates about your tasks and projects here
-            </p>
+            <h3 className="font-semibold text-gray-200 mb-2">No notifications yet</h3>
+            <p className="text-xs">You&apos;ll see updates about your tasks and projects here</p>
           </div>
         ) : (
           <div className="max-h-96 overflow-y-auto p-3">
@@ -247,22 +273,14 @@ export function Notifications({ userId }: NotificationsProps) {
                 }`}
               >
                 <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 mt-1">
-                    {getNotificationIcon(notification.type)}
-                  </div>
+                  <div className="flex-shrink-0 mt-1">{getNotificationIcon(notification.type)}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <p className="text-sm font-medium">
-                          {notification.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {notification.message}
-                        </p>
+                        <p className="text-sm font-medium">{notification.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{notification.message}</p>
                         <div className="flex items-center justify-between mt-2">
-                          <span className="text-xs text-muted-foreground">
-                            {formatDate(notification.created_at)}
-                          </span>
+                          <span className="text-xs text-muted-foreground">{formatDate(notification.created_at)}</span>
                           <div className="flex items-center space-x-1">
                             {!notification.read && (
                               <Button
@@ -279,9 +297,7 @@ export function Notifications({ userId }: NotificationsProps) {
                               variant="ghost"
                               size="sm"
                               className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                              onClick={() =>
-                                deleteNotification(notification.id)
-                              }
+                              onClick={() => deleteNotification(notification.id)}
                             >
                               <X className="h-3 w-3" />
                             </Button>
@@ -297,5 +313,5 @@ export function Notifications({ userId }: NotificationsProps) {
         )}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
+  )
 }
