@@ -2,33 +2,22 @@
 
 import * as React from "react"
 import {
-  LayoutDashboardIcon,
   FolderIcon,
-  UsersIcon,
   BarChartIcon,
   SettingsIcon,
-  HelpCircleIcon,
-  CreditCardIcon,
   PlusCircleIcon,
   LogOutIcon,
-  UserCircleIcon,
-  BellIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  KanbanIcon,
-  Sun,
-  Moon,
   ChevronDownIcon,
-  ChevronUpIcon,
   FolderOpenIcon,
   NotepadTextIcon,
-  Cable,
   PlugZap,
   List,
   Brain,
   Calendar,
   Bookmark,
-  CrownIcon,
+  ShieldCheck,
+  Sun,
+  Moon,
 } from "lucide-react"
 import { useRouter, usePathname } from "next/navigation"
 import { toast } from "sonner"
@@ -36,9 +25,7 @@ import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -52,14 +39,12 @@ import { Notifications } from "@/components/notifications"
 import { useTheme } from "next-themes"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
-import { Badge } from "@/components/ui/badge"
 import {
   Sidebar,
   SidebarContent,
   SidebarHeader,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarGroupContent,
   SidebarMenu,
   SidebarMenuItem,
@@ -68,12 +53,9 @@ import {
   SidebarMenuSubItem,
   SidebarMenuSubButton,
   SidebarMenuSkeleton,
-  SidebarTrigger,
-  SidebarProvider,
 } from "@/components/ui/sidebar"
 import { Home } from "lucide-react"
 import { useUser } from '@/components/user-provider'
-import { useEffect, useState } from "react";
 
 interface Project {
   id: string;
@@ -87,79 +69,54 @@ interface AppSidebarProps {
   onProjectUpdate?: (action: 'rename' | 'delete', projectId?: string) => void;
 }
 
-// Menü öğeleri
 const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Projects", url: "/dashboard/projects", icon: FolderIcon },
   { title: "Bookmarks", url: "/dashboard/bookmarks", icon: Bookmark },
-  { title: "Notes (soon)", url: "/dashboard/notes", icon: NotepadTextIcon, disabled: true },
-  { title: "Analytics (soon)", url: "/dashboard/analytics", icon: BarChartIcon, disabled: true },
-  { title: "Integrations (soon)", url: "/dashboard/integrations", icon: PlugZap, disabled: true },
-  { title: "Lists (soon)", url: "/dashboard/listd", icon: List, disabled: true },
-  { title: "AI Planner (soon)", url: "/dashboard/integrations", icon: Brain, disabled: true },
-  { title: "Meetings (soon)", url: "/dashboard/integrations", icon: Calendar, disabled: true },
+  { title: "Notes (próximamente)", url: "/dashboard/notes", icon: NotepadTextIcon, disabled: true },
+  { title: "Analytics (próximamente)", url: "/dashboard/analytics", icon: BarChartIcon, disabled: true },
+  { title: "Integrations (próximamente)", url: "/dashboard/integrations", icon: PlugZap, disabled: true },
+  { title: "Lists (próximamente)", url: "/dashboard/listd", icon: List, disabled: true },
+  { title: "AI Planner (próximamente)", url: "/dashboard/integrations2", icon: Brain, disabled: true },
+  { title: "Meetings (próximamente)", url: "/dashboard/integrations3", icon: Calendar, disabled: true },
   { title: "Settings", url: "/dashboard/settings", icon: SettingsIcon },
-  { title: "Billing", url: "/dashboard/billing", icon: CreditCardIcon },
 ]
 
 export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
   const { user } = useUser();
   const router = useRouter();
   const pathname = usePathname();
-  const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [projects, setProjects] = React.useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = React.useState(false);
   const { theme, setTheme } = useTheme();
-  const [subscription, setSubscription] = useState<'free' | 'pro'>('free');
 
-  useEffect(() => {
-    if (user?.id) {
-      supabase
-        .from('profiles')
-        .select('subscription_status')
-        .eq('id', user.id)
-        .single()
-        .then(({ data }) => {
-          if (data?.subscription_status) setSubscription(data.subscription_status);
-        });
-    }
-  }, [user?.id]);
+  const isAdmin = user?.role === 'admin' && user?.status === 'approved';
 
-  // Kullanıcı bilgisi
   const userData = {
     name: user?.full_name || user?.email || 'User',
     email: user?.email || '',
     avatar: user?.avatar_url || '',
-    subscription,
   };
 
-  // Load projects
   React.useEffect(() => {
     if (user) {
       loadProjects();
     }
   }, [user]);
 
-  // Listen for project updates
   React.useEffect(() => {
     if (onProjectUpdate) {
-      // This will be called from parent component when project is updated
       const handleProjectUpdate = (action: 'create' | 'rename' | 'delete', projectId?: string) => {
         if (action === 'delete') {
-          // Remove project from list immediately
           setProjects(prev => prev.filter(p => p.id !== projectId));
         } else if (action === 'rename' || action === 'create') {
-          // Reload projects to get updated names or new projects
           loadProjects();
         }
       };
-      
-      // Store the handler for external use
       (window as any).handleProjectUpdate = handleProjectUpdate;
     }
   }, [onProjectUpdate]);
 
-  // Cleanup global handler on unmount
   React.useEffect(() => {
     return () => {
       if ((window as any).handleProjectUpdate) {
@@ -170,11 +127,8 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
 
   const loadProjects = async () => {
     if (!user) return;
-    
-    console.log('Loading projects for user:', user.id);
     setLoadingProjects(true);
     try {
-      // Get projects owned by user
       const { data: projects, error } = await supabase
         .from('projects')
         .select('id, name, slug, user_id')
@@ -182,12 +136,10 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
         .order('created_at', { ascending: false })
         .limit(10);
 
-      console.log('Projects query result:', { projects, error });
-
       if (error) throw error;
       setProjects(projects || []);
     } catch (error) {
-      console.error('Error loading projects:', error);
+      console.log('[v0] Error loading projects:', error);
       setProjects([]);
     } finally {
       setLoadingProjects(false);
@@ -201,75 +153,49 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
   const handleSignOut = async () => {
     try {
       await onSignOut();
-      toast.success('Signed out successfully');
+      toast.success('Sesión cerrada');
     } catch (error) {
-      toast.error('Failed to sign out');
+      toast.error('No se pudo cerrar sesión');
     }
   };
 
   return (
     <Sidebar>
-      {/* Üst kısım (Logo veya başlık) */}
       <SidebarHeader>
         <div className="flex items-center gap-x-2">
-          <Link href="/" className="flex items-center">
-      <Image 
-                  src={theme === 'dark' ? '/logo-dark.png' : '/logo-light.png'} 
-                  width={130} 
-                  height={44} 
-                  alt="OrganizAPP by SAIA LABS" 
-                />
-                </Link>
-
-                </div>
+          <Link href="/dashboard" className="flex items-center">
+            <Image
+              src={theme === 'dark' ? '/logo-dark.png' : '/logo-light.png'}
+              width={130}
+              height={44}
+              alt="OrganizAPP by SAIA LABS"
+              priority
+            />
+          </Link>
+        </div>
       </SidebarHeader>
-      {/* Menü */}
       <SidebarContent>
         <SidebarGroup>
           <div className="flex flex-row items-center justify-between py-2 gap-x-2">
-            <Button size="xs" variant="secondary" className="flex w-full gap-2 justify-start bg-muted-foreground text-secondary hover:bg-primary/80" onClick={handleQuickCreate}>
+            <Button
+              size="xs"
+              variant="secondary"
+              className="flex w-full gap-2 justify-start bg-muted-foreground text-secondary hover:bg-primary/80"
+              onClick={handleQuickCreate}
+            >
               <PlusCircleIcon className="h-4 w-4" />
-              <span className="text-xs">New Project</span>
+              <span className="text-xs">Nuevo proyecto</span>
             </Button>
             {user?.id && <Notifications userId={user.id} />}
           </div>
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => {
-                if (item.title === "Bookmarks") {
-                  const isPro = userData.subscription === 'pro';
-                  return (
-                    <SidebarMenuItem key={item.title}>
-                      {isPro ? (
-                        <SidebarMenuButton
-                          asChild
-                          isActive={pathname?.startsWith("/dashboard/bookmarks") || false}
-                        >
-                          <Link href={item.url}>
-                            <item.icon className="w-4 h-4" />
-                            <span>{item.title}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      ) : (
-                        <SidebarMenuButton
-                          onClick={() => router.push('/dashboard/billing')}
-                          className="relative opacity-60 cursor-pointer"
-                        >
-                          <item.icon className="w-4 h-4" />
-                          <span>{item.title}</span>
-                          <span className="ml-2 px-2 py-0.5 text-xs bg-yellow-400 text-black rounded-full absolute right-2 top-1/2 -translate-y-1/2"><CrownIcon size="12px"/></span>
-                        </SidebarMenuButton>
-                      )}
-                    </SidebarMenuItem>
-                  );
-                }
-
                 if (item.title === "Projects") {
                   return (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton
                         isActive={pathname?.startsWith("/dashboard/projects") || false}
-                        
                       >
                         <FolderIcon className="h-4 w-4" />
                         <span>{item.title}</span>
@@ -289,7 +215,7 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
                                 isActive={pathname === `/dashboard/projects/${project.slug}`}
                               >
                                 <Link href={`/dashboard/projects/${project.slug}`} title={project.name}>
-                                <FolderOpenIcon className="w-4 h-4" />
+                                  <FolderOpenIcon className="w-4 h-4" />
                                   <span className="truncate">{project.name}</span>
                                 </Link>
                               </SidebarMenuSubButton>
@@ -304,16 +230,14 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
                 if (item.disabled) {
                   return (
                     <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        disabled
-                      >
+                      <SidebarMenuButton disabled>
                         <item.icon className="w-4 h-4" />
                         <span>{item.title}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );
                 }
-                 
+
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
@@ -328,11 +252,24 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
                   </SidebarMenuItem>
                 );
               })}
+
+              {isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname?.startsWith("/dashboard/admin") || false}
+                  >
+                    <Link href="/dashboard/admin/users">
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Admin</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      {/* Alt kısım (Kullanıcı veya çıkış) */}
       <SidebarFooter>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -349,8 +286,8 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
                 <span className="text-xs text-muted-foreground truncate">{userData.email}</span>
               </div>
               <ChevronDownIcon className="ml-auto h-4 w-4 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
+            </Button>
+          </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <div className="flex items-center gap-3 px-3 py-2">
               <Avatar className="h-9 w-9">
@@ -359,29 +296,24 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
                 ) : (
                   <AvatarFallback>{userData.name?.[0]?.toUpperCase() || userData.email?.[0]?.toUpperCase() || '?'}</AvatarFallback>
                 )}
-                </Avatar>
+              </Avatar>
               <div className="flex flex-col min-w-0 text-left">
                 <span className="font-medium truncate text-sm">{userData.name}</span>
                 <span className="text-xs text-muted-foreground truncate">{userData.email}</span>
-                  </div>
-                </div>
-              <DropdownMenuSeparator />
+              </div>
+            </div>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
               {theme === 'dark' ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
-              Toggle Theme
-                </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/dashboard/billing">
-                <CreditCardIcon className="h-4 w-4 mr-2" /> Billing
-              </Link>
-                </DropdownMenuItem>
-              <DropdownMenuSeparator />
+              Cambiar tema
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleSignOut} className="text-red-600">
-              <LogOutIcon className="h-4 w-4 mr-2" /> Log out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              <LogOutIcon className="h-4 w-4 mr-2" /> Cerrar sesión
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </SidebarFooter>
     </Sidebar>
   )
-} 
+}

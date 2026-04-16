@@ -1,43 +1,64 @@
-'use client';
-import { useEffect, useState } from 'react';
-import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { AppSidebar } from '@/components/app-sidebar';
-import { useUser } from '@/components/user-provider';
-import { useRouter } from 'next/navigation';
+"use client"
+import { useEffect, useState } from "react"
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { AppSidebar } from "@/components/app-sidebar"
+import { useUser } from "@/components/user-provider"
+import { useRouter } from "next/navigation"
 
 export default function DashboardLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
-  const { user, signOut } = useUser();
-  const router = useRouter();
-  const [mounted, setMounted] = useState(false);
+  const { user, signOut } = useUser()
+  const router = useRouter()
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    setMounted(true)
+  }, [])
+
+  // Approval guard: send pending / rejected users to /pending
+  useEffect(() => {
+    if (!mounted || !user) return
+    if (user.status && user.status !== "approved") {
+      router.replace("/pending")
+    }
+  }, [mounted, user, router])
+
+  // NOTA: el gate de admin NO vive aquí — lo maneja la propia página
+  // app/dashboard/admin/users/page.tsx, que respeta el estado `loading` del
+  // UserProvider y evita la race condition donde `user.role` todavía no ha
+  // cargado cuando este layout se ejecuta.
 
   const handleSignOut = () => {
-    router.push('/');
-    signOut();
-  };
+    router.push("/")
+    signOut()
+  }
 
-  const handleProjectUpdate = (action: 'rename' | 'delete', projectId?: string) => {
-    // Call the global handler if it exists
+  const handleProjectUpdate = (action: "rename" | "delete", projectId?: string) => {
     if ((window as any).handleProjectUpdate) {
-      (window as any).handleProjectUpdate(action, projectId);
+      ;(window as any).handleProjectUpdate(action, projectId)
     }
-  };
+  }
 
-  if (!mounted) return null; // SSR ile uyuşmazlık olmasın diye
+  if (!mounted) return null
 
   if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen w-full">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
-    );
+    )
+  }
+
+  // Still loading the profile data - show spinner rather than flashing content
+  if (user.status && user.status !== "approved") {
+    return (
+      <div className="flex items-center justify-center min-h-screen w-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
   }
 
   return (
@@ -52,5 +73,5 @@ export default function DashboardLayout({
         </main>
       </div>
     </SidebarProvider>
-  );
+  )
 }
