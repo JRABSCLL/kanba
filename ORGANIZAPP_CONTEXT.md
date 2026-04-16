@@ -1,7 +1,16 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-04-16
-**Versión actual:** v0.3 — Sistema de aprobación de usuarios + Admin Panel + Pro por defecto
+**Versión actual:** v0.4 — Remoción total de UI de billing/subscription
+
+## Cambios v0.4
+
+- **Dashboard (`app/dashboard/page.tsx`):** quitado el badge "Pro/Free", el botón "Upgrade to Pro" del header, la tarjeta de Subscription en las stats (ahora son 3 columnas en vez de 4), el warning "You've reached the free plan limit", y el Quick Action "Manage Subscription". El import `Crown` fue removido.
+- **Nuevo proyecto (`app/dashboard/projects/new/page.tsx`):** quitado el Card de warning "free plan limit" y el toast de error que mencionaba "Upgrade to Pro".
+- **Navbar (`components/navbar.tsx`):** quitado el item "Billing" del user dropdown.
+- **`/dashboard/billing`** y **`/dashboard/billing/success`:** convertidos a simples `redirect("/dashboard")` usando Server Components — así los links legados no rompen.
+- **`canCreateProject()`** en ambas páginas retorna siempre `true` mientras exista `profile` — sin restricciones de plan.
+- La landing original archivada (`app/_landing/`) todavía tiene textos de pricing pero no es accesible (se conserva solo para referencia).
 
 ---
 
