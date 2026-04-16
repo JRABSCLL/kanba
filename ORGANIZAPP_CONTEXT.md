@@ -1,7 +1,24 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-04-16
-**Versión actual:** v0.4.3 — Fix de Team Management (vista y RPC faltantes)
+**Versión actual:** v0.4.4 — Fix de Realtime zombie en notificaciones (tab idle)
+
+## Cambios v0.4.4 (hotfix)
+
+**Bug descubierto:** si dejabas la app abierta sin interactuar durante ~10 minutos y luego hacías click en cualquier módulo (proyectos, kanban, etc.), la pantalla se quedaba en blanco con loading infinito. No aparecía error en consola.
+
+**Causa raíz:** el componente `components/notifications.tsx` mantenía abierto un WebSocket de Supabase Realtime para escuchar cambios en la tabla `notifications`. Cuando la tab quedaba idle, los navegadores modernos (Chrome/Edge/Firefox) **suspenden WebSockets en background** para ahorrar recursos. Al regresar, el WebSocket quedaba "zombie" — aparentemente vivo en el estado de React pero en realidad desconectado. Cualquier query posterior competía con el intento de reconexión automática del cliente de Supabase, y el cliente se quedaba bloqueado esperando un ACK que nunca llegaba. Resultado: loading infinito en toda la app.
+
+**Solución aplicada:**
+- Canal único por usuario: `notifications:${userId}` en lugar del canal compartido `notifications`, que causaba colisiones entre usuarios.
+- Se agrega manejo de 3 eventos del navegador:
+  - `visibilitychange` → al volver la tab, se destruye el canal viejo y se crea uno nuevo + refresh de datos.
+  - `online` → al recuperar conectividad, igual (destruir + recrear + refresh).
+  - `focus` → refresca datos cuando se vuelve al window (no recrea canal, menos agresivo).
+- El canal se guarda en un `useRef` para poder recrearlo sin disparar re-renders y limpiarlo correctamente en unmount.
+- Todos los `console.log` relevantes usan el prefijo `[v0]` para que aparezcan en los logs del preview y faciliten debugging futuro.
+
+**Lección aprendida:** WebSockets + tabs idle es una combinación peligrosa. Siempre que se use Supabase Realtime se debe implementar `visibilitychange` para detectar cuando la tab vuelve del fondo y recrear el canal. Sin eso, cualquier app con Realtime se rompe silenciosamente en sesiones largas.
 
 ## Cambios v0.4.3 (hotfix)
 
