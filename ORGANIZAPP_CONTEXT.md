@@ -1,7 +1,26 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-04-16
-**Versión actual:** v0.4.2 — Fix de race condition en gate de admin
+**Versión actual:** v0.4.3 — Fix de Team Management (vista y RPC faltantes)
+
+## Cambios v0.4.3 (hotfix)
+
+**Bug descubierto:** al abrir la pestaña "Team" dentro de un proyecto, la consola del navegador mostraba `PGRST205: Could not find the table 'public.project_members_with_profiles'`. Además, al buscar un email en el invitador, siempre devolvía el mensaje "No Kanba account" aunque el email sí existiera en la DB.
+
+**Causa raíz:** el componente `components/team-management.tsx` depende de tres objetos SQL que existían en `supabase/migrations/20250101000000_emergency_fix_profiles_security.sql` pero **nunca se aplicaron** a la DB de este proyecto:
+1. Vista `project_members_with_profiles` (usada para listar miembros con sus datos)
+2. Función RPC `search_users_for_collaboration(search_term)` (usada para buscar e invitar)
+3. Función RPC `get_profiles_count` (debug)
+
+Como las funciones RPC no existían, el cliente de Supabase devolvía `undefined` y el código interpretaba eso como "el usuario no existe".
+
+**Solución aplicada:**
+- Se creó la vista `project_members_with_profiles` como JOIN entre `project_members` y `profiles`. Hereda automáticamente el RLS de las tablas base.
+- Se recrearon ambas funciones RPC con `SECURITY DEFINER` y `search_path = public`. Ambas ahora filtran `status = 'approved'` — coherente con el sistema de aprobación de v0.3: **usuarios pendientes/rechazados no pueden ser invitados a proyectos**.
+- `search_users_for_collaboration` requiere mínimo 2 caracteres, busca por email exacto o parcial y por nombre, ordena por relevancia (match exacto primero) y limita a 10 resultados.
+- Se actualizaron los 4 textos en `team-management.tsx` que mencionaban "Kanba account" / "Kanba users" → ahora todos dicen "OrganizAPP" y aclaran que el usuario debe estar **aprobado** para ser invitado.
+
+**Lección aprendida:** cuando una migración original incluye vistas o RPCs, verificar en Supabase que se hayan aplicado antes de depurar la UI. El error no era del código sino de la DB.
 
 ## Cambios v0.4.2 (hotfix)
 
