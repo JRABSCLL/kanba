@@ -77,8 +77,8 @@ export default function NewProjectPage() {
   };
 
   const canCreateProject = () => {
-    if (!profile) return false;
-    return profile.subscription_status === 'pro' || projectCount < 1;
+    // OrganizAPP: sin límites de plan para uso organizacional interno
+    return !!profile;
   };
 
   // Generate slug from project name

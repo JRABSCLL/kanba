@@ -153,9 +153,8 @@ export default function DashboardPage() {
   };
 
   const canCreateProject = () => {
-    if (!profile) return false;
-    const ownedProjects = projects.filter(p => p.user_id === user?.id);
-    return profile.subscription_status === 'pro' || ownedProjects.length < 1;
+    // OrganizAPP: sin límites de plan para uso organizacional interno
+    return !!profile;
   };
 
   const getProjectRole = (project: Project) => {
