@@ -1,7 +1,23 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-04-16
-**Versión actual:** v0.4.5 — Fix definitivo de loading infinito al cargar la app
+**Versión actual:** v0.4.6 — Fix de dropdown "Assign To" vacío (race condition en state)
+
+## Cambios v0.4.6 (hotfix)
+
+**Bug:** dentro de un proyecto, al crear/editar una tarea, el dropdown "Assign To" aparecía vacío (solo mostraba "Unassigned") aunque el proyecto tenía miembros registrados en la DB.
+
+**Causa raíz:** race condition de React en `app/dashboard/projects/[id]/page.tsx`. La función `loadProject()` hacía `setProject(project)` e inmediatamente llamaba `await loadProjectMembers()` sin argumentos. Pero `loadProjectMembers` leía `project?.id` del closure — y ese closure aún tenía `project = null` porque React no actualiza el state instantáneamente. Resultado: la query se hacía con `project_id = undefined`, Supabase devolvía `[]`, y el dropdown quedaba vacío.
+
+La pestaña "Team" SÍ cargaba bien porque se montaba después, cuando el state ya estaba sincronizado — por eso parecía un bug aleatorio.
+
+**Solución aplicada:**
+- `loadProjectMembers(projectIdArg?: string)` ahora acepta el `project.id` como argumento explícito. `loadProject()` le pasa `project.id` directamente después del fetch, sin depender del state.
+- Si no se pasa argumento, cae al state como fallback (útil en recargas post-mount).
+- Se agregó guard temprano: si no hay `pid`, retorna sin hacer query y loguea `[v0] loadProjectMembers: no project id available, skipping`.
+- Logs `[v0]` informan cuántos miembros cargaron y para qué proyecto.
+
+**Lección aprendida:** nunca leer state recién seteado en el mismo tick de ejecución — siempre pasar el valor como argumento, o usar el valor local antes del `setState`. Es un patrón de bug muy común cuando una función asíncrona sigue inmediatamente a un `setState`.
 
 ## Cambios v0.4.5 (hotfix crítico)
 

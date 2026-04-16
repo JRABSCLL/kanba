@@ -165,8 +165,9 @@ export default function ProjectPage() {
       if (projectError) throw projectError;
       setProject(project);
 
-      // Load project members
-      await loadProjectMembers();
+      // Load project members — pasamos project.id EXPLÍCITAMENTE para evitar
+      // la race condition donde el state 'project' aún es null en el closure.
+      await loadProjectMembers(project.id);
 
       // Get columns with tasks
       const { data: columns, error: columnsError } = await supabase
@@ -211,7 +212,15 @@ export default function ProjectPage() {
     }
   };
 
-  const loadProjectMembers = async () => {
+  const loadProjectMembers = async (projectIdArg?: string) => {
+    // Aceptamos projectId como argumento para evitar la race condition con el
+    // state 'project'. Si no se pasa, caemos al state (útil en recargas posteriores).
+    const pid = projectIdArg ?? project?.id;
+    if (!pid) {
+      console.log("[v0] loadProjectMembers: no project id available, skipping");
+      return;
+    }
+
     try {
       const { data: members, error } = await supabase
         .from('project_members')
@@ -224,12 +233,13 @@ export default function ProjectPage() {
             avatar_url
           )
         `)
-        .eq('project_id', project?.id);
+        .eq('project_id', pid);
 
       if (error) throw error;
+      console.log("[v0] loadProjectMembers: loaded", members?.length ?? 0, "members for project", pid);
       setProjectMembers(members || []);
     } catch (error: any) {
-      console.error('Error loading project members:', error);
+      console.error('[v0] Error loading project members:', error);
     }
   };
 
