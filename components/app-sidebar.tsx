@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Sun,
   Moon,
+  Building2,
 } from "lucide-react"
 import { useRouter, usePathname } from "next/navigation"
 import { toast } from "sonner"
@@ -72,6 +73,7 @@ interface AppSidebarProps {
 const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Projects", url: "/dashboard/projects", icon: FolderIcon },
+  { title: "Producción de Agencias", url: "/dashboard/agency-production", icon: Building2 },
   { title: "Bookmarks", url: "/dashboard/bookmarks", icon: Bookmark },
   { title: "Notes (próximamente)", url: "/dashboard/notes", icon: NotepadTextIcon, disabled: true },
   { title: "Analytics (próximamente)", url: "/dashboard/analytics", icon: BarChartIcon, disabled: true },
