@@ -1,11 +1,11 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-05-07
-**Versión actual:** v0.7.0 — Simplificación de profiles (is_active + role)
+**Versión actual:** v0.7.0 — Simplificación de profiles (is_active + role) + Teams genéricos
 
-## Cambios v0.7.0 (simplificación)
+## Cambios v0.7.0 (simplificación + teams)
 
-### Profiles simplificado
+### 1. Profiles simplificado
 
 **Cambio:** Se eliminó la complejidad de SaaS del modelo de usuarios.
 
@@ -26,52 +26,100 @@ profiles: is_active (boolean), role ('member'|'admin')
 - Recreadas RLS policies para usar `is_active`
 - Actualizado `handle_new_user()` trigger
 
-**Archivos frontend actualizados:**
-- `components/user-provider.tsx` — tipo User usa `is_active` en vez de `status`
-- `app/dashboard/layout.tsx` — checks de `is_active`
-- `app/pending/page.tsx` — checks de `is_active`
-- `app/dashboard/admin/users/page.tsx` — UI simplificada (Activos/Inactivos en vez de Pendientes/Aprobados/Rechazados)
-- `components/app-sidebar.tsx` — isAdmin usa `is_active`
-- `components/agency-production/agency-production-module.tsx` — canManageProduction usa `is_active`
-
 **Flujo de usuarios:**
 1. Usuario se registra → `is_active = false`, `role = 'member'`
-2. Admin activa → `is_active = true`
+2. Admin activa en `/dashboard/admin/users` → `is_active = true`
 3. Admin opcionalmente hace admin → `role = 'admin'`
+4. Dashboard: admin ve todo, member ve solo sus proyectos/contextos
 
-## Cambios v0.6.0 (arquitectura)
+---
 
-### 1. Nueva arquitectura de Teams escalable
+### 2. Teams genéricos + organización clara
 
-**Problema anterior:** `project_members` solo ligaba usuarios a proyectos. No había forma de manejar equipos genéricos que sirvieran para agencias, clientes, o cualquier otra agrupación futura.
+**Propósito de Teams:** Agrupar usuarios INTERNOS de tu organización en contextos (equipos, departamentos).
 
-**Solución implementada:** Nuevas tablas `teams` y `team_members` que unifican la gestión de equipos.
+**Importante:** Los `type='agency'` / `type='client'` son para **futuro** (si quieres que esos usuarios tengan login). Por ahora son solo `'internal'`.
 
 **Tablas creadas:**
 ```sql
-teams
-├── id, name, type ('internal' | 'agency' | 'client' | 'other')
-├── agency_id (nullable, liga a agencies si type='agency')
-├── description, created_by, created_at, updated_at
-
-team_members
-├── id, team_id → teams, user_id → profiles
-├── role ('owner' | 'admin' | 'member' | 'viewer')
-├── unique(team_id, user_id)
+teams (id, name, type: 'internal'|'agency'|'client'|'other', agency_id, description, created_by, created_at, updated_at)
+team_members (id, team_id, user_id, role: 'owner'|'admin'|'member'|'viewer', created_at)
 ```
 
-**RLS Policies:**
-- Usuarios solo ven teams a los que pertenecen (o admins ven todo)
-- Solo admins pueden crear/editar teams y team_members
+**RLS policies:**
+- Usuarios solo ven teams a los que pertenecen
+- Admins ven todos los teams
+- Solo admins pueden crear/editar teams
 
-**Función helper:** `get_user_teams(user_id)` retorna todos los teams del usuario con su rol.
+**Función helper:** `get_user_teams(user_id)` retorna todos los teams del usuario.
 
-**Beneficios:**
-- Una sola tabla de pertenencia en vez de `project_members` + `agency_members` + etc.
-- Mismo código de UI para buscar/asignar usuarios en cualquier contexto
-- Escalable: mañana quieres "clients"? Solo agregas `type='client'`
+---
 
-### 2. Fix de redirect al dashboard (race condition)
+## Modelo de datos completo (v0.7)
+
+### Usuarios y pertenencia
+
+```
+USERS (Interno de tu organización)
+├── profiles (id, email, full_name, is_active, role)
+│   ├── is_active = false → bloqueado, no puede entrar
+│   ├── role = 'member' → ve solo lo suyo
+│   └── role = 'admin' → ve TODO
+│
+├── team_members (user_id, team_id, role)
+│   └── Pertenencia a equipos internos (Marketing, Diseño, etc.)
+│
+├── project_members (user_id, project_id, role)
+│   └── Colaboradores específicos en un proyecto
+│
+└── RLS: 
+    ├── admins ven todo
+    └── members ven solo sus teams + sus proyectos
+```
+
+### Agencias (Externos)
+
+```
+AGENCIAS EXTERNAS (Proveedores, sin login)
+├── agencies (id, name, type, contact_name, contact_email, contact_phone, status, created_at)
+│   ├── Solo datos de contacto
+│   ├── Sin login (no son usuarios)
+│   └── No pertenecen a teams ni projects
+│
+├── production_deliverables (id, agency_id, responsible_internal_id, status, ...)
+│   ├── Trabajos que la agencia ejecuta
+│   ├── responsible_internal_id = admin/member de TU equipo que supervisa
+│   └── RLS: is_approved_user() puede ver (todos los usuarios activos)
+│
+└── production_plans, production_plan_items, brands
+    └── Configuración de lo que produce cada agencia
+```
+
+---
+
+## Flujo de acceso (Autorización)
+
+```
+Admin (is_active=true, role='admin')
+├── Ve todos los users
+├── Ve todos los teams
+├── Ve todos los projects
+├── Ve todas las agencias
+└── Puede manejar producción
+
+Member (is_active=true, role='member')
+├── Solo ve teams a los que pertenece (RLS de team_members)
+├── Solo ve projects donde es colaborador (RLS de project_members)
+├── Ve agencias (READ-only, RLS permite is_approved_user)
+└── No puede manejar producción (solo lectura)
+
+Blocked (is_active=false)
+└── Dashboard redirige a /pending
+```
+
+---
+
+## Cambios v0.6.0 (arquitectura)
 
 **Problema:** al navegar a `/dashboard/agency-production-v2`, a veces redirigía al dashboard principal por una race condition de hidratación.
 
