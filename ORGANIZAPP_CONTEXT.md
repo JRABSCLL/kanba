@@ -1,7 +1,96 @@
 # OrganizAPP — Contexto del Proyecto
 
-**Última actualización:** 2026-04-16
-**Versión actual:** v0.4.6 — Fix de dropdown "Assign To" vacío (race condition en state)
+**Última actualización:** 2026-05-07
+**Versión actual:** v0.6.0 — Arquitectura de Teams escalable + UI de asignación de responsables
+
+## Cambios v0.6.0 (arquitectura)
+
+### 1. Nueva arquitectura de Teams escalable
+
+**Problema anterior:** `project_members` solo ligaba usuarios a proyectos. No había forma de manejar equipos genéricos que sirvieran para agencias, clientes, o cualquier otra agrupación futura.
+
+**Solución implementada:** Nuevas tablas `teams` y `team_members` que unifican la gestión de equipos.
+
+**Tablas creadas:**
+```sql
+teams
+├── id, name, type ('internal' | 'agency' | 'client' | 'other')
+├── agency_id (nullable, liga a agencies si type='agency')
+├── description, created_by, created_at, updated_at
+
+team_members
+├── id, team_id → teams, user_id → profiles
+├── role ('owner' | 'admin' | 'member' | 'viewer')
+├── unique(team_id, user_id)
+```
+
+**RLS Policies:**
+- Usuarios solo ven teams a los que pertenecen (o admins ven todo)
+- Solo admins pueden crear/editar teams y team_members
+
+**Función helper:** `get_user_teams(user_id)` retorna todos los teams del usuario con su rol.
+
+**Beneficios:**
+- Una sola tabla de pertenencia en vez de `project_members` + `agency_members` + etc.
+- Mismo código de UI para buscar/asignar usuarios en cualquier contexto
+- Escalable: mañana quieres "clients"? Solo agregas `type='client'`
+
+### 2. Fix de redirect al dashboard (race condition)
+
+**Problema:** al navegar a `/dashboard/agency-production-v2`, a veces redirigía al dashboard principal por una race condition de hidratación.
+
+**Causa:** El `useEffect` del AUTH GATE en `dashboard/layout.tsx` se ejecutaba durante la hidratación cuando `user` era temporalmente `undefined`.
+
+**Solución:** Agregamos `redirectCheckedRef` (useRef) para asegurar que el check de redirect solo ocurre UNA VEZ después de que `loading` pasa a `false`. Esto evita redirects durante la hidratación.
+
+### 3. UI de búsqueda de usuarios para asignar responsables
+
+**Nueva funcionalidad en el módulo de agencias:**
+- Campo "Responsable interno" en el formulario de creación de plan
+- Usa la función RPC existente `search_users_for_collaboration`
+- Búsqueda con debounce de 300ms
+- Muestra nombre y email de usuarios encontrados
+- Cache de usuarios para mostrar nombres en vez de IDs
+
+**Componente nuevo:** `UserSearchField` — reusable para cualquier lugar donde necesites buscar y seleccionar usuarios.
+
+**Archivos modificados:**
+- `app/dashboard/layout.tsx` — fix del redirect con useRef
+- `components/agency-production/agency-production-module.tsx` — UserSearchField + estado de búsqueda + integración con createPlan
+- `components/app-sidebar.tsx` — link a Producción de Agencias
+
+## Cambios v0.5.0 (feature)
+
+**Nueva funcionalidad:** módulo completo para controlar el trabajo de agencias/proveedores externos sin subir archivos — solo tracking de estado y cumplimiento.
+
+**Tablas creadas en Supabase:**
+- `agencies` — proveedores externos (nombre, tipo, contacto, status)
+- `brands` — marcas del cliente para asignar a entregas
+- `production_plans` — planes de producción por periodo (mensual, semanal, campaña)
+- `production_plan_items` — ítems del plan (tipo de entregable, cantidad objetivo, canal)
+- `production_deliverables` — cada pieza individual con su flujo de estados
+
+**Flujo de estados de entregables:** pending → brief_sent → in_production → delivered → in_review → changes_requested → approved → published (+ paused/cancelled)
+
+**Vistas disponibles:**
+1. **Dashboard** — resumen por agencia (cumplimiento, atrasos, riesgo) + planes recientes
+2. **Kanban** — entregables por estado tipo tablero
+3. **Tabla** — lista filtrable de todos los entregables
+4. **Configuración** — CRUD de agencias, marcas y planes con generación automática de entregables
+
+**Permisos (RLS):**
+- Usuarios aprobados pueden ver todo
+- Solo admins pueden crear/editar/eliminar
+
+**Diseño:** consistente con el resto de OrganizAPP — usa Card, Badge, Button de shadcn/ui, métricas en grid responsivo, soporte dark mode, textos en español.
+
+**Fix incluido:** se removió el guard `if (!userLoading && !user) setLoading(false)` que causaba redirect al login por race condition con el UserProvider. Ahora la página espera al layout padre para manejar el caso de no-user.
+
+**Archivos:**
+- `app/dashboard/agency-production/page.tsx` — página completa (~860 líneas)
+- `docs/agency-production-module.md` — documentación del módulo
+- `docs/supabase-agency-production-schema.sql` — schema SQL (referencia)
+- `components/app-sidebar.tsx` — nuevo item en el sidebar
 
 ## Cambios v0.4.6 (hotfix)
 
