@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { useUser } from "@/components/user-provider"
@@ -13,24 +13,36 @@ export default function DashboardLayout({
   const { user, loading, signOut } = useUser()
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
+  const redirectCheckedRef = useRef(false)
 
-  // Debug: log en cada render
-  console.log("[v0] DashboardLayout: render", { mounted, loading, userId: user?.id, userStatus: user?.status, pathname: typeof window !== 'undefined' ? window.location.pathname : 'SSR' })
+  console.log("[v0] DashboardLayout: render", { mounted, loading, userId: user?.id, userStatus: user?.status, redirectChecked: redirectCheckedRef.current })
 
   useEffect(() => {
     setMounted(true)
-    console.log("[v0] DashboardLayout: mounted, pathname =", window.location.pathname)
+    console.log("[v0] DashboardLayout: mounted")
   }, [])
 
   // AUTH GATE: si NO estamos cargando y NO hay usuario → login.
-  // Antes el layout mostraba spinner eterno si `user` era null, incluso cuando
-  // la sesión ya estaba definitivamente expirada o no iniciada.
+  // Usamos useRef para asegurar que solo hacemos este check UNA VEZ por sesión,
+  // no en cada render. Esto evita la race condition de hidratación donde `user`
+  // está temporalmente undefined antes de que el UserProvider termine.
   useEffect(() => {
-    console.log("[v0] DashboardLayout AUTH GATE check:", { mounted, loading, hasUser: !!user, pathname: window.location.pathname })
     if (!mounted) return
-    if (loading) return
+    if (loading) {
+      // Aún cargando → no hacer nada
+      console.log("[v0] DashboardLayout: still loading, waiting...")
+      redirectCheckedRef.current = false
+      return
+    }
+
+    // loading === false y mounted === true → podemos proceder
+    // Pero solo hacemos el redirect check UNA VEZ, no en cada render
+    if (redirectCheckedRef.current) return
+
+    redirectCheckedRef.current = true
+
     if (!user) {
-      console.log("[v0] DashboardLayout: no user & not loading → redirecting to /login from", window.location.pathname)
+      console.log("[v0] DashboardLayout: no user after loading finished → redirecting to /login")
       router.replace("/login")
     }
   }, [mounted, loading, user, router])
