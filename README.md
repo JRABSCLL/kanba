@@ -6,11 +6,10 @@ Internal project management and production control system for managing your orga
 
 ## Features
 
-- **Projects Management** — Organize and track internal projects
-- **Agency Production Control** — Manage and monitor deliverables from external agencies
-- **Team Collaboration** — Assign tasks, collaborate on projects
-- **User Management** — Admin controls for user activation and roles
-- **Real-time Updates** — Instant sync across team members
+- **Projects Management** — Internal projects with team collaboration via `project_members`
+- **Agency Production Control** — Track deliverables from external agencies without file uploads (state-based tracking only)
+- **User Management** — Admin controls for activation, roles, and permissions (`is_active` + `role`)
+- **Real-time Sync** — Supabase row-level security (RLS) ensures members see only their projects
 - **Dark/Light Mode** — Full theme support
 
 ## Getting Started
@@ -53,40 +52,34 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Architecture
 
-### Database (Supabase)
+### Database Structure (Supabase)
 
-- **profiles** — User accounts (is_active, role: 'admin' | 'member')
-- **teams** — Organizational groups (internal, agencies, clients, etc.)
-- **team_members** — User-to-team associations
-- **projects** — Internal projects
-- **project_members** — User-to-project associations
-- **agencies** — External agency information (no login)
-- **production_plans** — Plans for agency deliverables
-- **production_deliverables** — Individual tasks/items from agencies
+**Usuarios internos:**
+- `profiles` — Users (is_active, role)
+- `projects` — Internal projects
+- `project_members` — User-to-project associations
+
+**Agencias externas (sin login):**
+- `agencies` — Provider data (contact, status)
+- `production_plans` — Production schedules per agency
+- `production_plan_items` — Individual items in plans
+- `production_deliverables` — State-tracked deliverables
+- `brands` — Brands to assign to deliverables
 
 ### Access Control
 
-- **Admin users** (`role='admin' && is_active=true`) — Full access to all modules
-- **Regular members** (`role='member' && is_active=true`) — Only see projects/teams they belong to
-- **Inactive users** (`is_active=false`) — Blocked from dashboard
+- **Admins** (`is_active=true && role='admin'`) — Access all modules, manage users and agencias
+- **Members** (`is_active=true && role='member'`) — See only projects they're assigned to, read-only access to agencies
+- **Inactive** (`is_active=false`) — Blocked from dashboard, redirected to `/pending`
 
-### Modules
+### Key Features
 
-1. **Dashboard** — Overview of projects and tasks
-2. **Projects** — Manage internal projects
-3. **Agency Production** — Control external agency work
-4. **Admin Users** — Manage team members (activate/deactivate, assign roles)
+1. **Projects** — Collaborate with internal team using `project_members`
+2. **Agency Production** — Track external deliverables by state (no file uploads)
+3. **Admin Console** — Activate users, assign roles, manage permissions
+4. **User Search** — Assign internal supervisors to agency deliverables
 
-## Deployment
-
-### Vercel (Recommended)
-
-1. Push code to GitHub
-2. Connect repository to Vercel
-3. Set environment variables in Vercel dashboard
-4. Deploy
-
-See [ORGANIZAPP_CONTEXT.md](ORGANIZAPP_CONTEXT.md) for detailed architecture documentation.
+See [ORGANIZAPP_CONTEXT.md](ORGANIZAPP_CONTEXT.md) for complete architecture and changelog.
 
 ## License
 

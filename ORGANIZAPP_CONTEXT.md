@@ -1,9 +1,52 @@
 # OrganizAPP — Contexto del Proyecto
 
-**Última actualización:** 2026-05-07
-**Versión actual:** v0.7.0 — Simplificación de profiles (is_active + role) + Teams genéricos
+**Última actualización:** 2026-05-07  
+**Versión actual:** v0.8.0 — Arquitectura limpia (sin duplicidades)
 
-## Cambios v0.7.0 (simplificación + teams)
+---
+
+## TL;DR — Qué es OrganizAPP
+
+**Herramienta interna de gestión:**
+- **Usuarios internos** (con login) → admins + members
+- **Proyectos** → colaboración usando `project_members`
+- **Agencias externas** (sin login) → datos + tracking de entregas
+
+**Permisos:**
+- Admin ve TODO, puede crear/editar
+- Member ve solo sus proyectos, read-only en agencias
+
+**Base de datos:** Supabase (PostgreSQL + RLS + Auth)
+
+**Tablas principales:**
+- `profiles` (usuarios)
+- `projects` + `project_members` (colaboración interna)
+- `agencies` + `production_*` (agencias y entregas)
+
+---
+
+## Cambios v0.8.0 (limpieza)
+
+### Eliminadas: tables de teams no utilizadas
+
+**Problema:** Se crearon tablas `teams` + `team_members` pero NO se usaban en código frontend. `project_members` ya maneja colaboración.
+
+**Solución:** Eliminar duplicidad.
+
+**Migración:**
+```sql
+DROP TABLE team_members;
+DROP TABLE teams;
+DROP FUNCTION get_user_teams(uuid);
+DROP POLICY ON teams;  -- x4 policies
+DROP POLICY ON team_members;  -- x3 policies
+```
+
+**Por qué:** "Teams" = simplemente proyectos colaborativos. Si necesitas agrupar usuarios mañana, solo creas más projects.
+
+---
+
+## Cambios v0.7.0 (simplificación)
 
 ### 1. Profiles simplificado
 
@@ -19,103 +62,113 @@ profiles: status ('pending'|'approved'|'rejected'), role, subscription_status, s
 profiles: is_active (boolean), role ('member'|'admin')
 ```
 
-**Migraciones realizadas:**
-- Agregado `is_active` boolean (default: false)
-- Migrados usuarios existentes: `status = 'approved'` → `is_active = true`
-- Actualizadas funciones RPC: `is_approved_user()`, `is_approved_admin()`, `search_users_for_collaboration()`
-- Recreadas RLS policies para usar `is_active`
-- Actualizado `handle_new_user()` trigger
-
-**Flujo de usuarios:**
+**Flujo:**
 1. Usuario se registra → `is_active = false`, `role = 'member'`
 2. Admin activa en `/dashboard/admin/users` → `is_active = true`
-3. Admin opcionalmente hace admin → `role = 'admin'`
-4. Dashboard: admin ve todo, member ve solo sus proyectos/contextos
+3. Admin opcionalmente → `role = 'admin'`
 
 ---
 
-### 2. Teams genéricos + organización clara
+## Arquitectura final (v0.8)
 
-**Propósito de Teams:** Agrupar usuarios INTERNOS de tu organización en contextos (equipos, departamentos).
+### Qué ve cada usuario
 
-**Importante:** Los `type='agency'` / `type='client'` son para **futuro** (si quieres que esos usuarios tengan login). Por ahora son solo `'internal'`.
+**Admin (is_active=true, role='admin'):**
+- Ve todos los usuarios
+- Ve todos los proyectos (propios + de otros)
+- Ve todas las agencias
+- Puede crear/editar proyectos y asignar usuarios
+- Puede gestionar producción de agencias
 
-**Tablas creadas:**
-```sql
-teams (id, name, type: 'internal'|'agency'|'client'|'other', agency_id, description, created_by, created_at, updated_at)
-team_members (id, team_id, user_id, role: 'owner'|'admin'|'member'|'viewer', created_at)
-```
+**Member (is_active=true, role='member'):**
+- Solo ve proyectos donde es colaborador (`project_members`)
+- Ve agencias (read-only)
+- Puede contribuir a sus proyectos asignados
+- No puede gestionar producción
 
-**RLS policies:**
-- Usuarios solo ven teams a los que pertenecen
-- Admins ven todos los teams
-- Solo admins pueden crear/editar teams
-
-**Función helper:** `get_user_teams(user_id)` retorna todos los teams del usuario.
-
----
-
-## Modelo de datos completo (v0.7)
-
-### Usuarios y pertenencia
-
-```
-USERS (Interno de tu organización)
-├── profiles (id, email, full_name, is_active, role)
-│   ├── is_active = false → bloqueado, no puede entrar
-│   ├── role = 'member' → ve solo lo suyo
-│   └── role = 'admin' → ve TODO
-│
-├── team_members (user_id, team_id, role)
-│   └── Pertenencia a equipos internos (Marketing, Diseño, etc.)
-│
-├── project_members (user_id, project_id, role)
-│   └── Colaboradores específicos en un proyecto
-│
-└── RLS: 
-    ├── admins ven todo
-    └── members ven solo sus teams + sus proyectos
-```
-
-### Agencias (Externos)
-
-```
-AGENCIAS EXTERNAS (Proveedores, sin login)
-├── agencies (id, name, type, contact_name, contact_email, contact_phone, status, created_at)
-│   ├── Solo datos de contacto
-│   ├── Sin login (no son usuarios)
-│   └── No pertenecen a teams ni projects
-│
-├── production_deliverables (id, agency_id, responsible_internal_id, status, ...)
-│   ├── Trabajos que la agencia ejecuta
-│   ├── responsible_internal_id = admin/member de TU equipo que supervisa
-│   └── RLS: is_approved_user() puede ver (todos los usuarios activos)
-│
-└── production_plans, production_plan_items, brands
-    └── Configuración de lo que produce cada agencia
-```
+**Bloqueado (is_active=false):**
+- Dashboard redirige a `/pending`
 
 ---
 
-## Flujo de acceso (Autorización)
+## Modelo de datos (v0.8) — Estructura actual
+
+### Usuarios y colaboración interna
 
 ```
-Admin (is_active=true, role='admin')
-├── Ve todos los users
-├── Ve todos los teams
-├── Ve todos los projects
-├── Ve todas las agencias
-└── Puede manejar producción
+profiles (id, email, full_name, is_active, role, avatar_url, created_at, updated_at)
+  └─ Todos los usuarios de TU organización
+     - is_active=false → bloqueado
+     - role='member' → ve solo sus proyectos
+     - role='admin' → ve TODO
 
-Member (is_active=true, role='member')
-├── Solo ve teams a los que pertenece (RLS de team_members)
-├── Solo ve projects donde es colaborador (RLS de project_members)
-├── Ve agencias (READ-only, RLS permite is_approved_user)
-└── No puede manejar producción (solo lectura)
+projects (id, name, description, owner_id, created_at, updated_at)
+  └─ Proyectos internos (campañas, features, etc.)
 
-Blocked (is_active=false)
-└── Dashboard redirige a /pending
+project_members (id, project_id, user_id, role, created_at)
+  └─ Colaboradores de cada proyecto
+     - role='owner'|'admin'|'member'|'viewer'
+     - RLS: admins ven todo, members ven solo sus proyectos
 ```
+
+### Agencias externas y producción
+
+```
+agencies (id, name, type, contact_name, contact_email, contact_phone, status, created_at, updated_at)
+  └─ Proveedores externos (sin login, solo datos)
+     - Datos de contacto para coordinación
+     - status='active'|'inactive'|'on_hold'
+
+production_plans (id, agency_id, name, status, responsible_admin_id, created_at, updated_at)
+  └─ Planes de producción por agencia
+     - Periódicos: mensual, semanal, campaña
+     - responsible_admin_id = quién supervisa
+
+production_plan_items (id, production_plan_id, title, status, created_at, updated_at)
+  └─ Items del plan (tipos de entregables, cantidades)
+
+production_deliverables (id, agency_id, responsible_internal_id, status, ...)
+  └─ Entregas individuales
+     - status flow: pending → brief_sent → in_production → delivered → in_review → changes_requested → approved → published
+     - RLS: is_approved_user() puede ver (todos los usuarios activos)
+
+brands (id, name, type, description, created_at, updated_at)
+  └─ Marcas para asignar a entregas
+```
+
+---
+
+## Cómo usar el proyecto
+
+### Para admins
+
+1. **Gestionar usuarios:** `/dashboard/admin/users`
+   - Ver activos/inactivos
+   - Activar nuevos usuarios
+   - Asignar roles
+
+2. **Crear proyectos:** `/dashboard`
+   - Click "Nuevo proyecto"
+   - Agregar colaboradores (automáticamente asignado como `project_members`)
+
+3. **Gestionar agencias:** `/dashboard/agency-production`
+   - Ver, crear, editar agencias
+   - Crear planes de producción
+   - Asignar supervisores internos (usuarios activos)
+   - Trackear estado de entregas
+
+### Para members
+
+1. **Ver mis proyectos:** `/dashboard`
+   - Solo los proyectos donde eres colaborador
+
+2. **Trabajar en proyecto:** `/dashboard/projects/[id]`
+   - Ver detalles, colaboradores
+   - (Funcionalidad específica según proyecto)
+
+3. **Ver agencias:** `/dashboard/agency-production` (read-only)
+   - Ver entregas asignadas a tu agencia (si aplica)
+   - Ver estado general
 
 ---
 
