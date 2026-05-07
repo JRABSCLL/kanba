@@ -1,7 +1,63 @@
 # OrganizAPP — Contexto del Proyecto
 
-**Última actualización:** 2026-04-16
-**Versión actual:** v0.5.0 — Módulo de Producción de Agencias
+**Última actualización:** 2026-05-07
+**Versión actual:** v0.6.0 — Arquitectura de Teams escalable + UI de asignación de responsables
+
+## Cambios v0.6.0 (arquitectura)
+
+### 1. Nueva arquitectura de Teams escalable
+
+**Problema anterior:** `project_members` solo ligaba usuarios a proyectos. No había forma de manejar equipos genéricos que sirvieran para agencias, clientes, o cualquier otra agrupación futura.
+
+**Solución implementada:** Nuevas tablas `teams` y `team_members` que unifican la gestión de equipos.
+
+**Tablas creadas:**
+```sql
+teams
+├── id, name, type ('internal' | 'agency' | 'client' | 'other')
+├── agency_id (nullable, liga a agencies si type='agency')
+├── description, created_by, created_at, updated_at
+
+team_members
+├── id, team_id → teams, user_id → profiles
+├── role ('owner' | 'admin' | 'member' | 'viewer')
+├── unique(team_id, user_id)
+```
+
+**RLS Policies:**
+- Usuarios solo ven teams a los que pertenecen (o admins ven todo)
+- Solo admins pueden crear/editar teams y team_members
+
+**Función helper:** `get_user_teams(user_id)` retorna todos los teams del usuario con su rol.
+
+**Beneficios:**
+- Una sola tabla de pertenencia en vez de `project_members` + `agency_members` + etc.
+- Mismo código de UI para buscar/asignar usuarios en cualquier contexto
+- Escalable: mañana quieres "clients"? Solo agregas `type='client'`
+
+### 2. Fix de redirect al dashboard (race condition)
+
+**Problema:** al navegar a `/dashboard/agency-production-v2`, a veces redirigía al dashboard principal por una race condition de hidratación.
+
+**Causa:** El `useEffect` del AUTH GATE en `dashboard/layout.tsx` se ejecutaba durante la hidratación cuando `user` era temporalmente `undefined`.
+
+**Solución:** Agregamos `redirectCheckedRef` (useRef) para asegurar que el check de redirect solo ocurre UNA VEZ después de que `loading` pasa a `false`. Esto evita redirects durante la hidratación.
+
+### 3. UI de búsqueda de usuarios para asignar responsables
+
+**Nueva funcionalidad en el módulo de agencias:**
+- Campo "Responsable interno" en el formulario de creación de plan
+- Usa la función RPC existente `search_users_for_collaboration`
+- Búsqueda con debounce de 300ms
+- Muestra nombre y email de usuarios encontrados
+- Cache de usuarios para mostrar nombres en vez de IDs
+
+**Componente nuevo:** `UserSearchField` — reusable para cualquier lugar donde necesites buscar y seleccionar usuarios.
+
+**Archivos modificados:**
+- `app/dashboard/layout.tsx` — fix del redirect con useRef
+- `components/agency-production/agency-production-module.tsx` — UserSearchField + estado de búsqueda + integración con createPlan
+- `components/app-sidebar.tsx` — link a Producción de Agencias
 
 ## Cambios v0.5.0 (feature)
 
