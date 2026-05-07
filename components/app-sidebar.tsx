@@ -73,7 +73,7 @@ interface AppSidebarProps {
 const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Projects", url: "/dashboard/projects", icon: FolderIcon },
-  { title: "Producción de Agencias", url: "/dashboard/agency-production", icon: Building2 },
+  { title: "Producción de Agencias", url: "/dashboard/agency-production-v2", icon: Building2 },
   { title: "Bookmarks", url: "/dashboard/bookmarks", icon: Bookmark },
   { title: "Notes (próximamente)", url: "/dashboard/notes", icon: NotepadTextIcon, disabled: true },
   { title: "Analytics (próximamente)", url: "/dashboard/analytics", icon: BarChartIcon, disabled: true },
@@ -88,9 +88,6 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
   const { user } = useUser();
   const router = useRouter();
   const pathname = usePathname();
-
-  // Debug: log cada vez que el sidebar renderiza
-  console.log("[v0] AppSidebar: render, pathname =", pathname);
   const [projects, setProjects] = React.useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = React.useState(false);
   const { theme, setTheme } = useTheme();
