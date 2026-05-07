@@ -676,6 +676,12 @@ export function AgencyProductionModule() {
             creatingAgency={creatingAgency}
             creatingBrand={creatingBrand}
             creatingPlan={creatingPlan}
+            userSearchTerm={userSearchTerm}
+            setUserSearchTerm={setUserSearchTerm}
+            userSearchResults={userSearchResults}
+            searchingUsers={searchingUsers}
+            selectedResponsible={selectedResponsible}
+            setSelectedResponsible={setSelectedResponsible}
           />
         ) : <PermissionCard />
       )}
@@ -759,7 +765,7 @@ function TableView({ deliverables, agencyById, brandById, planById, onStatusChan
 }
 
 function SetupView(props: any) {
-  const { agencies, brands, agencyForm, setAgencyForm, brandForm, setBrandForm, planForm, setPlanForm, draftItems, setDraftItems, createAgency, createBrand, createPlan, creatingAgency, creatingBrand, creatingPlan } = props
+  const { agencies, brands, agencyForm, setAgencyForm, brandForm, setBrandForm, planForm, setPlanForm, draftItems, setDraftItems, createAgency, createBrand, createPlan, creatingAgency, creatingBrand, creatingPlan, userSearchTerm, setUserSearchTerm, userSearchResults, searchingUsers, selectedResponsible, setSelectedResponsible } = props
   const updateDraft = (id: string, changes: Partial<PlanItemDraft>) => setDraftItems((prev: PlanItemDraft[]) => prev.map((item) => item.local_id === id ? { ...item, ...changes } : item))
   const removeDraft = (id: string) => setDraftItems((prev: PlanItemDraft[]) => prev.length === 1 ? prev : prev.filter((item) => item.local_id !== id))
 
