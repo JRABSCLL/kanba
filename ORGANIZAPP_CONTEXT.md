@@ -1,7 +1,40 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-04-16
-**Versión actual:** v0.4.6 — Fix de dropdown "Assign To" vacío (race condition en state)
+**Versión actual:** v0.5.0 — Módulo de Producción de Agencias
+
+## Cambios v0.5.0 (feature)
+
+**Nueva funcionalidad:** módulo completo para controlar el trabajo de agencias/proveedores externos sin subir archivos — solo tracking de estado y cumplimiento.
+
+**Tablas creadas en Supabase:**
+- `agencies` — proveedores externos (nombre, tipo, contacto, status)
+- `brands` — marcas del cliente para asignar a entregas
+- `production_plans` — planes de producción por periodo (mensual, semanal, campaña)
+- `production_plan_items` — ítems del plan (tipo de entregable, cantidad objetivo, canal)
+- `production_deliverables` — cada pieza individual con su flujo de estados
+
+**Flujo de estados de entregables:** pending → brief_sent → in_production → delivered → in_review → changes_requested → approved → published (+ paused/cancelled)
+
+**Vistas disponibles:**
+1. **Dashboard** — resumen por agencia (cumplimiento, atrasos, riesgo) + planes recientes
+2. **Kanban** — entregables por estado tipo tablero
+3. **Tabla** — lista filtrable de todos los entregables
+4. **Configuración** — CRUD de agencias, marcas y planes con generación automática de entregables
+
+**Permisos (RLS):**
+- Usuarios aprobados pueden ver todo
+- Solo admins pueden crear/editar/eliminar
+
+**Diseño:** consistente con el resto de OrganizAPP — usa Card, Badge, Button de shadcn/ui, métricas en grid responsivo, soporte dark mode, textos en español.
+
+**Fix incluido:** se removió el guard `if (!userLoading && !user) setLoading(false)` que causaba redirect al login por race condition con el UserProvider. Ahora la página espera al layout padre para manejar el caso de no-user.
+
+**Archivos:**
+- `app/dashboard/agency-production/page.tsx` — página completa (~860 líneas)
+- `docs/agency-production-module.md` — documentación del módulo
+- `docs/supabase-agency-production-schema.sql` — schema SQL (referencia)
+- `components/app-sidebar.tsx` — nuevo item en el sidebar
 
 ## Cambios v0.4.6 (hotfix)
 
