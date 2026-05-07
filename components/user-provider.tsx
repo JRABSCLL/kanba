@@ -10,9 +10,8 @@ interface User {
   full_name?: string
   avatar_url?: string
   // From profiles table
-  status?: "pending" | "approved" | "rejected"
+  is_active?: boolean
   role?: "member" | "admin"
-  subscription_status?: "free" | "pro"
 }
 
 interface UserContextType {
@@ -55,7 +54,7 @@ async function loadProfileForUser(authUser: any, timeoutMs = 8000): Promise<User
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("full_name, avatar_url, status, role, subscription_status")
+        .select("full_name, avatar_url, is_active, role")
         .eq("id", authUser.id)
         .maybeSingle()
 
@@ -69,14 +68,13 @@ async function loadProfileForUser(authUser: any, timeoutMs = 8000): Promise<User
         return base
       }
 
-      console.log("[v0] loadProfileForUser: success - status:", data.status, "role:", data.role)
+      console.log("[v0] loadProfileForUser: success - is_active:", data.is_active, "role:", data.role)
       return {
         ...base,
         full_name: data.full_name || base.full_name,
         avatar_url: data.avatar_url || base.avatar_url,
-        status: data.status as User["status"],
+        is_active: data.is_active as boolean,
         role: data.role as User["role"],
-        subscription_status: data.subscription_status as User["subscription_status"],
       }
     } catch (err) {
       console.log("[v0] loadProfileForUser: unexpected error", err)

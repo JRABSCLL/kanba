@@ -92,7 +92,7 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
   const [loadingProjects, setLoadingProjects] = React.useState(false);
   const { theme, setTheme } = useTheme();
 
-  const isAdmin = user?.role === 'admin' && user?.status === 'approved';
+  const isAdmin = user?.role === 'admin' && user?.is_active === true;
 
   const userData = {
     name: user?.full_name || user?.email || 'User',

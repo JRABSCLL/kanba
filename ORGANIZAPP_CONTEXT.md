@@ -1,7 +1,43 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-05-07
-**Versión actual:** v0.6.0 — Arquitectura de Teams escalable + UI de asignación de responsables
+**Versión actual:** v0.7.0 — Simplificación de profiles (is_active + role)
+
+## Cambios v0.7.0 (simplificación)
+
+### Profiles simplificado
+
+**Cambio:** Se eliminó la complejidad de SaaS del modelo de usuarios.
+
+**Antes:**
+```
+profiles: status ('pending'|'approved'|'rejected'), role, subscription_status, stripe_customer_id
+```
+
+**Ahora:**
+```
+profiles: is_active (boolean), role ('member'|'admin')
+```
+
+**Migraciones realizadas:**
+- Agregado `is_active` boolean (default: false)
+- Migrados usuarios existentes: `status = 'approved'` → `is_active = true`
+- Actualizadas funciones RPC: `is_approved_user()`, `is_approved_admin()`, `search_users_for_collaboration()`
+- Recreadas RLS policies para usar `is_active`
+- Actualizado `handle_new_user()` trigger
+
+**Archivos frontend actualizados:**
+- `components/user-provider.tsx` — tipo User usa `is_active` en vez de `status`
+- `app/dashboard/layout.tsx` — checks de `is_active`
+- `app/pending/page.tsx` — checks de `is_active`
+- `app/dashboard/admin/users/page.tsx` — UI simplificada (Activos/Inactivos en vez de Pendientes/Aprobados/Rechazados)
+- `components/app-sidebar.tsx` — isAdmin usa `is_active`
+- `components/agency-production/agency-production-module.tsx` — canManageProduction usa `is_active`
+
+**Flujo de usuarios:**
+1. Usuario se registra → `is_active = false`, `role = 'member'`
+2. Admin activa → `is_active = true`
+3. Admin opcionalmente hace admin → `role = 'admin'`
 
 ## Cambios v0.6.0 (arquitectura)
 

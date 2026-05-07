@@ -215,7 +215,7 @@ function buildTitle(item: PlanItemDraft, index: number) {
 
 export function AgencyProductionModule() {
   const { user, loading: userLoading } = useUser()
-  const canManageProduction = user?.role === "admin" && user?.status === "approved"
+  const canManageProduction = user?.role === "admin" && user?.is_active === true
 
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
