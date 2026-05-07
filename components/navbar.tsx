@@ -14,15 +14,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Notifications } from '@/components/notifications';
-import { 
-  Kanban, 
-  Moon, 
-  Sun, 
-  User, 
-  Settings, 
+import {
+  Moon,
+  Sun,
+  User,
+  Settings,
   LogOut,
-  CreditCard,
-  KanbanIcon
 } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { GitStarButton } from '@/src/components/eldoraui/gitstarbutton';

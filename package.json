@@ -1,21 +1,12 @@
 {
-  "name": "kanban-project-manager",
-  "version": "0.1.0",
+  "name": "organizapp",
+  "version": "0.7.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "postgres:setup": "node scripts/setup-postgres.js",
-    "postgres:start": "docker-compose -f docker-compose.postgres.yml up -d",
-    "postgres:stop": "docker-compose -f docker-compose.postgres.yml down",
-    "postgres:reset": "docker-compose -f docker-compose.postgres.yml down -v && docker-compose -f docker-compose.postgres.yml up -d",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio",
-    "vercel-build": "prisma generate && next build --debug"
+    "lint": "next lint"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
@@ -51,10 +42,6 @@
     "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/supabase-js": "^2.39.0",
     "@tanstack/react-table": "^8.21.3",
-    "@types/node": "20.6.2",
-    "@types/react": "18.2.22",
-    "@types/react-dom": "18.2.7",
-    "@vercel/analytics": "^1.5.0",
     "autoprefixer": "10.4.15",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -80,19 +67,11 @@
     "react-use-measure": "^2.1.7",
     "recharts": "^2.15.4",
     "sonner": "^1.7.4",
-    "stripe": "^14.15.0",
     "tailwind-merge": "^2.5.2",
     "tailwindcss": "3.3.3",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "5.2.2",
     "vaul": "^0.9.9",
     "zod": "^3.25.67"
-  },
-  "devDependencies": {
-    "@prisma/client": "^5.7.1",
-    "prisma": "^5.7.1"
-  },
-  "overrides": {
-    "@types/react": "18.2.22"
   }
 }
