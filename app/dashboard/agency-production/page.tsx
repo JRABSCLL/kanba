@@ -218,19 +218,11 @@ export default function AgencyProductionPage() {
     })
   }, [agencies, deliverables])
 
-  // Debug: log en cada render para entender el flujo
-  console.log("[v0] agency-production: render", { userLoading, userId: user?.id, loading, schemaError })
-
   useEffect(() => {
-    console.log("[v0] agency-production: useEffect triggered", { userLoading, userId: user?.id })
     // Solo cargamos cuando tenemos usuario confirmado.
     // Si no hay user, el dashboard/layout.tsx se encarga de redirigir al login.
-    // NO ponemos loading=false aquí si !user — eso causa race conditions.
     if (!userLoading && user) {
-      console.log("[v0] agency-production: user ready, loading module")
       loadModule()
-    } else if (!userLoading && !user) {
-      console.log("[v0] agency-production: NO USER - waiting for layout redirect")
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLoading, user?.id])

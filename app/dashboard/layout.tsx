@@ -15,11 +15,8 @@ export default function DashboardLayout({
   const [mounted, setMounted] = useState(false)
   const redirectCheckedRef = useRef(false)
 
-  console.log("[v0] DashboardLayout: render", { mounted, loading, userId: user?.id, userStatus: user?.status, redirectChecked: redirectCheckedRef.current })
-
   useEffect(() => {
     setMounted(true)
-    console.log("[v0] DashboardLayout: mounted")
   }, [])
 
   // AUTH GATE: si NO estamos cargando y NO hay usuario → login.
@@ -29,8 +26,6 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!mounted) return
     if (loading) {
-      // Aún cargando → no hacer nada
-      console.log("[v0] DashboardLayout: still loading, waiting...")
       redirectCheckedRef.current = false
       return
     }
@@ -42,7 +37,6 @@ export default function DashboardLayout({
     redirectCheckedRef.current = true
 
     if (!user) {
-      console.log("[v0] DashboardLayout: no user after loading finished → redirecting to /login")
       router.replace("/login")
     }
   }, [mounted, loading, user, router])
@@ -51,7 +45,6 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!mounted || loading || !user) return
     if (user.status && user.status !== "approved") {
-      console.log("[v0] DashboardLayout: user status =", user.status, "→ redirecting to /pending")
       router.replace("/pending")
     }
   }, [mounted, loading, user, router])
