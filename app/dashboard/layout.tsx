@@ -14,19 +14,23 @@ export default function DashboardLayout({
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
 
+  // Debug: log en cada render
+  console.log("[v0] DashboardLayout: render", { mounted, loading, userId: user?.id, userStatus: user?.status, pathname: typeof window !== 'undefined' ? window.location.pathname : 'SSR' })
+
   useEffect(() => {
     setMounted(true)
-    console.log("[v0] DashboardLayout: mounted")
+    console.log("[v0] DashboardLayout: mounted, pathname =", window.location.pathname)
   }, [])
 
   // AUTH GATE: si NO estamos cargando y NO hay usuario → login.
   // Antes el layout mostraba spinner eterno si `user` era null, incluso cuando
   // la sesión ya estaba definitivamente expirada o no iniciada.
   useEffect(() => {
+    console.log("[v0] DashboardLayout AUTH GATE check:", { mounted, loading, hasUser: !!user, pathname: window.location.pathname })
     if (!mounted) return
     if (loading) return
     if (!user) {
-      console.log("[v0] DashboardLayout: no user & not loading → redirecting to /login")
+      console.log("[v0] DashboardLayout: no user & not loading → redirecting to /login from", window.location.pathname)
       router.replace("/login")
     }
   }, [mounted, loading, user, router])

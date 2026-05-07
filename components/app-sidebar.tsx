@@ -88,6 +88,9 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
   const { user } = useUser();
   const router = useRouter();
   const pathname = usePathname();
+
+  // Debug: log cada vez que el sidebar renderiza
+  console.log("[v0] AppSidebar: render, pathname =", pathname);
   const [projects, setProjects] = React.useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = React.useState(false);
   const { theme, setTheme } = useTheme();
