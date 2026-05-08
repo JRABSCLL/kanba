@@ -19,8 +19,6 @@ import {
   ClipboardList,
   Edit3,
   ExternalLink,
-  Filter,
-  LayoutGrid,
   Loader2,
   Plus,
   RefreshCw,
@@ -220,19 +218,23 @@ export function AgencyProductionModule() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [schemaError, setSchemaError] = useState<string | null>(null)
-  const [activeView, setActiveView] = useState<"dashboard" | "kanban" | "table" | "setup">("dashboard")
+  const [activeView, setActiveView] = useState<"dashboard" | "agency" | "plan" | "setup">("dashboard")
+  
+  // Hierarchical selection state
+  const [selectedAgencyId, setSelectedAgencyId] = useState<string | null>(null)
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
+  const [planViewMode, setPlanViewMode] = useState<"kanban" | "table">("kanban")
+  
+  // Create deliverable dialog
+  const [createDeliverableOpen, setCreateDeliverableOpen] = useState(false)
+  const [createDeliverableStatus, setCreateDeliverableStatus] = useState<string>("pending")
+  const [creatingDeliverable, setCreatingDeliverable] = useState(false)
 
   const [agencies, setAgencies] = useState<Agency[]>([])
   const [brands, setBrands] = useState<Brand[]>([])
   const [plans, setPlans] = useState<ProductionPlan[]>([])
   const [planItems, setPlanItems] = useState<PlanItem[]>([])
   const [deliverables, setDeliverables] = useState<Deliverable[]>([])
-
-  const [agencyFilter, setAgencyFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [typeFilter, setTypeFilter] = useState("all")
-  const [overdueFilter, setOverdueFilter] = useState("all")
-  const [search, setSearch] = useState("")
 
   const [agencyForm, setAgencyForm] = useState({ name: "", type: "", contact_name: "", contact_email: "", notes: "" })
   const [brandForm, setBrandForm] = useState({ name: "", description: "" })
@@ -264,26 +266,13 @@ export function AgencyProductionModule() {
   const agencyById = useMemo(() => new Map(agencies.map((agency) => [agency.id, agency])), [agencies])
   const brandById = useMemo(() => new Map(brands.map((brand) => [brand.id, brand])), [brands])
   const planById = useMemo(() => new Map(plans.map((plan) => [plan.id, plan])), [plans])
-  const availableTypes = useMemo(() => Array.from(new Set([...DEFAULT_TYPES, ...deliverables.map((item) => item.deliverable_type)].filter(Boolean))), [deliverables])
-
-  const filteredDeliverables = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return deliverables.filter((deliverable) => {
-      if (agencyFilter !== "all" && deliverable.agency_id !== agencyFilter) return false
-      if (statusFilter !== "all" && deliverable.status !== statusFilter) return false
-      if (typeFilter !== "all" && deliverable.deliverable_type !== typeFilter) return false
-      if (overdueFilter === "overdue" && !isOverdue(deliverable)) return false
-      if (overdueFilter === "not_overdue" && isOverdue(deliverable)) return false
-      if (!q) return true
-      const agencyName = agencyById.get(deliverable.agency_id)?.name || ""
-      const planName = planById.get(deliverable.plan_id)?.name || ""
-      return [deliverable.title, deliverable.description, deliverable.deliverable_type, agencyName, planName, deliverable.notes]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
-    })
-  }, [agencyFilter, statusFilter, typeFilter, overdueFilter, search, deliverables, agencyById, planById])
+  
+  // Derived data for selected agency/plan
+  const selectedAgency = selectedAgencyId ? agencyById.get(selectedAgencyId) : null
+  const selectedPlan = selectedPlanId ? planById.get(selectedPlanId) : null
+  const agencyPlans = useMemo(() => selectedAgencyId ? plans.filter(p => p.agency_id === selectedAgencyId) : [], [plans, selectedAgencyId])
+  const planDeliverables = useMemo(() => selectedPlanId ? deliverables.filter(d => d.plan_id === selectedPlanId) : [], [deliverables, selectedPlanId])
+  const agencyDeliverables = useMemo(() => selectedAgencyId ? deliverables.filter(d => d.agency_id === selectedAgencyId) : [], [deliverables, selectedAgencyId])
 
   const stats = useMemo(() => {
     const total = deliverables.length
@@ -586,6 +575,33 @@ export function AgencyProductionModule() {
     }
   }
 
+  async function createDeliverable(title: string, status: string) {
+    if (!selectedPlanId || !selectedAgencyId) return toast.error("Selecciona un plan primero")
+    if (!title.trim()) return toast.error("El título es requerido")
+    setCreatingDeliverable(true)
+    try {
+      const plan = planById.get(selectedPlanId)
+      const { data, error } = await supabase.from("production_deliverables").insert({
+        plan_id: selectedPlanId,
+        agency_id: selectedAgencyId,
+        brand_id: plan?.brand_id || null,
+        title: title.trim(),
+        deliverable_type: "Tarea",
+        status,
+        priority: "medium",
+        created_by: user?.id || null,
+      }).select().single()
+      if (error) throw error
+      setDeliverables(prev => [data as Deliverable, ...prev])
+      setCreateDeliverableOpen(false)
+      toast.success("Entregable creado")
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo crear el entregable")
+    } finally {
+      setCreatingDeliverable(false)
+    }
+  }
+
   async function updateDeliverableStatus(deliverable: Deliverable, nextStatus: string) {
     if (!canManageProduction) return toast.error("Solo admins pueden cambiar estados")
     setUpdatingDeliverableId(deliverable.id)
@@ -608,18 +624,72 @@ export function AgencyProductionModule() {
   if (userLoading || loading) return <LoadingState />
   if (schemaError) return <SchemaMissing message={schemaError} onRetry={loadModule} />
 
+  // Navigation helpers
+  const goToAgency = (agencyId: string) => {
+    setSelectedAgencyId(agencyId)
+    setSelectedPlanId(null)
+    setActiveView("agency")
+  }
+  const goToPlan = (planId: string) => {
+    const plan = planById.get(planId)
+    if (plan) {
+      setSelectedAgencyId(plan.agency_id)
+      setSelectedPlanId(planId)
+      setActiveView("plan")
+    }
+  }
+  const goBack = () => {
+    if (activeView === "plan") {
+      setSelectedPlanId(null)
+      setActiveView("agency")
+    } else if (activeView === "agency") {
+      setSelectedAgencyId(null)
+      setActiveView("dashboard")
+    } else {
+      setActiveView("dashboard")
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeader refreshing={refreshing} onRefresh={loadData} canManage={canManageProduction} onCreate={() => setActiveView("setup")} />
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-        <MetricCard label="Planes activos" value={stats.activePlans} icon={<Target className="h-4 w-4" />} />
-        <MetricCard label="Entregables" value={stats.total} icon={<ClipboardList className="h-4 w-4" />} />
-        <MetricCard label="Aprobados" value={stats.approved} icon={<CheckCircle2 className="h-4 w-4" />} />
-        <MetricCard label="En revisión" value={stats.inReview} icon={<LayoutGrid className="h-4 w-4" />} />
-        <MetricCard label="Atrasados" value={stats.overdue} icon={<AlertCircle className="h-4 w-4" />} danger={stats.overdue > 0} />
-        <MetricCard label="Cumplimiento" value={`${stats.completion}%`} icon={<Target className="h-4 w-4" />} />
+      {/* Header with breadcrumb navigation */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Building2 className="h-4 w-4" />
+            <button onClick={() => { setSelectedAgencyId(null); setSelectedPlanId(null); setActiveView("dashboard") }} className="hover:text-foreground">Agencias</button>
+            {selectedAgency && <><span>/</span><button onClick={() => goToAgency(selectedAgency.id)} className="hover:text-foreground">{selectedAgency.name}</button></>}
+            {selectedPlan && <><span>/</span><span>{selectedPlan.name}</span></>}
+          </div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+            {selectedPlan ? selectedPlan.name : selectedAgency ? selectedAgency.name : "Producción de Agencias"}
+          </h1>
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            {selectedPlan ? `Plan de ${selectedAgency?.name} · ${selectedPlan.period_start} - ${selectedPlan.period_end}` 
+              : selectedAgency ? `${selectedAgency.type || "Agencia"} · ${agencyPlans.length} planes · ${agencyDeliverables.length} entregables`
+              : "Controla producción por agencia: planes, entregables, estados y cumplimiento."}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(selectedAgency || selectedPlan) && <Button variant="outline" size="sm" onClick={goBack}><X className="mr-2 h-4 w-4" />Volver</Button>}
+          <Button variant="outline" size="sm" onClick={loadData} disabled={refreshing}>{refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Actualizar</Button>
+          {canManageProduction && !selectedPlan && <Button size="sm" onClick={() => setActiveView("setup")}><Plus className="mr-2 h-4 w-4" />Crear plan</Button>}
+        </div>
       </div>
 
+      {/* Global stats only on dashboard */}
+      {activeView === "dashboard" && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+          <MetricCard label="Agencias" value={agencies.length} icon={<Building2 className="h-4 w-4" />} />
+          <MetricCard label="Planes activos" value={stats.activePlans} icon={<Target className="h-4 w-4" />} />
+          <MetricCard label="Entregables" value={stats.total} icon={<ClipboardList className="h-4 w-4" />} />
+          <MetricCard label="Aprobados" value={stats.approved} icon={<CheckCircle2 className="h-4 w-4" />} />
+          <MetricCard label="Atrasados" value={stats.overdue} icon={<AlertCircle className="h-4 w-4" />} danger={stats.overdue > 0} />
+          <MetricCard label="Cumplimiento" value={`${stats.completion}%`} icon={<Target className="h-4 w-4" />} />
+        </div>
+      )}
+
+      {/* Edit panel */}
       {editingDeliverable && deliverableForm && (
         <EditDeliverablePanel
           form={deliverableForm}
@@ -630,33 +700,90 @@ export function AgencyProductionModule() {
         />
       )}
 
-      <div className="flex flex-wrap gap-2 border-b pb-2">
-        <ViewButton active={activeView === "dashboard"} onClick={() => setActiveView("dashboard")} label="Dashboard" />
-        <ViewButton active={activeView === "kanban"} onClick={() => setActiveView("kanban")} label="Kanban" />
-        <ViewButton active={activeView === "table"} onClick={() => setActiveView("table")} label="Tabla" />
-        {canManageProduction && <ViewButton active={activeView === "setup"} onClick={() => setActiveView("setup")} label="Configuración" />}
-      </div>
+      {/* View tabs - only on dashboard */}
+      {activeView === "dashboard" && (
+        <div className="flex flex-wrap gap-2 border-b pb-2">
+          <ViewButton active={true} onClick={() => {}} label="Dashboard" />
+          {canManageProduction && <ViewButton active={false} onClick={() => setActiveView("setup")} label="Configuración" />}
+        </div>
+      )}
 
-      {activeView !== "setup" && (
-        <Filters
-          agencies={agencies}
-          availableTypes={availableTypes}
-          agencyFilter={agencyFilter}
-          setAgencyFilter={setAgencyFilter}
-          statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
-          typeFilter={typeFilter}
-          setTypeFilter={setTypeFilter}
-          overdueFilter={overdueFilter}
-          setOverdueFilter={setOverdueFilter}
-          search={search}
-          setSearch={setSearch}
+      {/* Agency view tabs */}
+      {activeView === "agency" && (
+        <div className="flex flex-wrap gap-2 border-b pb-2">
+          <ViewButton active={true} onClick={() => {}} label="Planes" />
+        </div>
+      )}
+
+      {/* Plan view tabs */}
+      {activeView === "plan" && (
+        <div className="flex flex-wrap gap-2 border-b pb-2">
+          <ViewButton active={planViewMode === "kanban"} onClick={() => setPlanViewMode("kanban")} label="Kanban" />
+          <ViewButton active={planViewMode === "table"} onClick={() => setPlanViewMode("table")} label="Tabla" />
+        </div>
+      )}
+
+      {/* Dashboard view - clickable agencies */}
+      {activeView === "dashboard" && (
+        <DashboardView 
+          summaries={agencySummaries} 
+          plans={plans} 
+          planItems={planItems} 
+          deliverables={deliverables} 
+          agencyById={agencyById}
+          onAgencyClick={goToAgency}
+          onPlanClick={goToPlan}
         />
       )}
 
-      {activeView === "dashboard" && <DashboardView summaries={agencySummaries} plans={plans} planItems={planItems} deliverables={deliverables} agencyById={agencyById} />}
-      {activeView === "kanban" && <KanbanView deliverables={filteredDeliverables} agencyById={agencyById} planById={planById} onStatusChange={updateDeliverableStatus} onEdit={startEditDeliverable} updatingId={updatingDeliverableId} canManage={canManageProduction} />}
-      {activeView === "table" && <TableView deliverables={filteredDeliverables} agencyById={agencyById} brandById={brandById} planById={planById} onStatusChange={updateDeliverableStatus} onEdit={startEditDeliverable} updatingId={updatingDeliverableId} canManage={canManageProduction} />}
+      {/* Agency view - list of plans */}
+      {activeView === "agency" && selectedAgency && (
+        <AgencyView
+          agency={selectedAgency}
+          plans={agencyPlans}
+          deliverables={agencyDeliverables}
+          planItems={planItems}
+          onPlanClick={goToPlan}
+        />
+      )}
+
+      {/* Plan view - kanban or table */}
+      {activeView === "plan" && selectedPlan && (
+        <>
+          {planViewMode === "kanban" && (
+            <PlanKanbanView 
+              deliverables={planDeliverables} 
+              onStatusChange={updateDeliverableStatus} 
+              onEdit={startEditDeliverable} 
+              updatingId={updatingDeliverableId} 
+              canManage={canManageProduction}
+              onCreateDeliverable={(status: string) => { setCreateDeliverableStatus(status); setCreateDeliverableOpen(true) }}
+            />
+          )}
+          {planViewMode === "table" && (
+            <PlanTableView 
+              deliverables={planDeliverables} 
+              brandById={brandById}
+              onStatusChange={updateDeliverableStatus} 
+              onEdit={startEditDeliverable} 
+              updatingId={updatingDeliverableId} 
+              canManage={canManageProduction}
+            />
+          )}
+          {/* Create deliverable dialog */}
+          {createDeliverableOpen && (
+            <CreateDeliverableDialog
+              open={createDeliverableOpen}
+              onClose={() => setCreateDeliverableOpen(false)}
+              onCreate={createDeliverable}
+              status={createDeliverableStatus}
+              creating={creatingDeliverable}
+            />
+          )}
+        </>
+      )}
+
+      {/* Setup view */}
       {activeView === "setup" && (
         canManageProduction ? (
           <SetupView
@@ -689,22 +816,6 @@ export function AgencyProductionModule() {
   )
 }
 
-function PageHeader({ refreshing, onRefresh, canManage, onCreate }: { refreshing: boolean; onRefresh: () => void; canManage: boolean; onCreate: () => void }) {
-  return (
-    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-      <div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground"><Building2 className="h-4 w-4" /> Creative Ops / Agency Operations</div>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Producción de Agencias</h1>
-        <p className="max-w-3xl text-sm text-muted-foreground">Controla producción flexible por agencia: planes, entregables, fechas, links externos, estados y cumplimiento.</p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>{refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Actualizar</Button>
-        {canManage && <Button size="sm" onClick={onCreate}><Plus className="mr-2 h-4 w-4" />Crear plan</Button>}
-      </div>
-    </div>
-  )
-}
-
 function LoadingState() {
   return <div className="flex h-full w-full items-center justify-center py-24"><div className="flex flex-col items-center gap-3"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /><p className="text-sm text-muted-foreground">Cargando producción de agencias...</p></div></div>
 }
@@ -717,51 +828,347 @@ function ViewButton({ active, onClick, label }: { active: boolean; onClick: () =
   return <Button variant={active ? "default" : "outline"} size="sm" onClick={onClick}>{label}</Button>
 }
 
-function Filters(props: any) {
-  const { agencies, availableTypes, agencyFilter, setAgencyFilter, statusFilter, setStatusFilter, typeFilter, setTypeFilter, overdueFilter, setOverdueFilter, search, setSearch } = props
-  return (
-    <Card><CardContent className="grid gap-3 p-4 md:grid-cols-5">
-      <div className="space-y-2 md:col-span-2"><Label className="flex items-center gap-2 text-xs text-muted-foreground"><Filter className="h-3 w-3" /> Buscar</Label><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar entregable, plan, agencia o nota..." /></div>
-      <SelectField label="Agencia" value={agencyFilter} onChange={setAgencyFilter} options={[{ value: "all", label: "Todas" }, ...agencies.map((agency: Agency) => ({ value: agency.id, label: agency.name }))]} />
-      <SelectField label="Estado" value={statusFilter} onChange={setStatusFilter} options={[{ value: "all", label: "Todos" }, ...FLOW_STATUSES.map((status) => ({ value: status.value, label: status.label }))]} />
-      <SelectField label="Tipo" value={typeFilter} onChange={setTypeFilter} options={[{ value: "all", label: "Todos" }, ...availableTypes.map((type: string) => ({ value: type, label: type }))]} />
-      <SelectField label="Atraso" value={overdueFilter} onChange={setOverdueFilter} options={[{ value: "all", label: "Todos" }, { value: "overdue", label: "Solo atrasados" }, { value: "not_overdue", label: "Sin atraso" }]} />
-    </CardContent></Card>
-  )
-}
-
-function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: { value: string; label: string }[] }) {
-  return <div className="space-y-2"><Label className="text-xs text-muted-foreground">{label}</Label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
-}
-
-function DashboardView({ summaries, plans, planItems, deliverables, agencyById }: any) {
+function DashboardView({ summaries, plans, planItems, deliverables, agencyById, onAgencyClick, onPlanClick }: any) {
   return (
     <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-      <Card><CardHeader><CardTitle>Agencias activas</CardTitle><CardDescription>Cumplimiento y riesgo por agencia.</CardDescription></CardHeader><CardContent className="space-y-3">
-        {summaries.length === 0 ? <Empty message="Crea una agencia para empezar." /> : summaries.map((summary: any) => <div key={summary.agency.id} className="rounded-xl border p-4"><div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><div className="font-medium">{summary.agency.name}</div><div className="text-xs text-muted-foreground">{summary.agency.type || "Agencia / proveedor"}</div></div><Badge className={summary.overdue > 0 ? "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300" : "bg-muted text-muted-foreground"}>{summary.state}</Badge></div><div className="mt-4 grid grid-cols-5 gap-2 text-center text-sm"><MiniStat label="Total" value={summary.total} /><MiniStat label="Aprobados" value={summary.approved} /><MiniStat label="Revisión" value={summary.inReview} /><MiniStat label="Atrasados" value={summary.overdue} /><MiniStat label="Cumpl." value={`${summary.completion}%`} /></div></div>)}
-      </CardContent></Card>
-      <Card><CardHeader><CardTitle>Planes recientes</CardTitle><CardDescription>Compromisos de producción por periodo.</CardDescription></CardHeader><CardContent className="space-y-3">
-        {plans.length === 0 ? <Empty message="Aún no hay planes de producción." /> : plans.slice(0, 8).map((plan: ProductionPlan) => {
-          const items = planItems.filter((item: PlanItem) => item.plan_id === plan.id)
-          const planDeliverables = deliverables.filter((deliverable: Deliverable) => deliverable.plan_id === plan.id)
-          const approved = planDeliverables.filter((item: Deliverable) => item.status === "approved" || item.status === "published").length
-          return <div key={plan.id} className="rounded-lg border p-3"><div className="flex items-start justify-between gap-2"><div><div className="font-medium leading-tight">{plan.name}</div><div className="text-xs text-muted-foreground">{agencyById.get(plan.agency_id)?.name || "Agencia"} · {plan.period_start}–{plan.period_end}</div></div><Badge variant="outline">{approved}/{planDeliverables.length}</Badge></div><div className="mt-2 flex flex-wrap gap-1">{items.map((item: PlanItem) => <Badge key={item.id} variant="secondary" className="text-xs">{item.deliverable_type}: {item.target_quantity}</Badge>)}</div></div>
-        })}
-      </CardContent></Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Agencias activas</CardTitle>
+          <CardDescription>Haz clic en una agencia para ver sus planes y entregas.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {summaries.length === 0 ? <Empty message="Crea una agencia para empezar." /> : summaries.map((summary: any) => (
+            <button
+              key={summary.agency.id}
+              onClick={() => onAgencyClick(summary.agency.id)}
+              className="w-full text-left rounded-xl border p-4 transition-colors hover:bg-muted/50 hover:border-primary/30"
+            >
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="font-medium">{summary.agency.name}</div>
+                  <div className="text-xs text-muted-foreground">{summary.agency.type || "Agencia / proveedor"}</div>
+                </div>
+                <Badge className={summary.overdue > 0 ? "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300" : "bg-muted text-muted-foreground"}>{summary.state}</Badge>
+              </div>
+              <div className="mt-4 grid grid-cols-5 gap-2 text-center text-sm">
+                <MiniStat label="Total" value={summary.total} />
+                <MiniStat label="Aprobados" value={summary.approved} />
+                <MiniStat label="Revisión" value={summary.inReview} />
+                <MiniStat label="Atrasados" value={summary.overdue} />
+                <MiniStat label="Cumpl." value={`${summary.completion}%`} />
+              </div>
+            </button>
+          ))}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Planes recientes</CardTitle>
+          <CardDescription>Haz clic en un plan para ver su kanban.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {plans.length === 0 ? <Empty message="Aún no hay planes de producción." /> : plans.slice(0, 8).map((plan: ProductionPlan) => {
+            const items = planItems.filter((item: PlanItem) => item.plan_id === plan.id)
+            const planDelivs = deliverables.filter((deliverable: Deliverable) => deliverable.plan_id === plan.id)
+            const approved = planDelivs.filter((item: Deliverable) => item.status === "approved" || item.status === "published").length
+            return (
+              <button
+                key={plan.id}
+                onClick={() => onPlanClick(plan.id)}
+                className="w-full text-left rounded-lg border p-3 transition-colors hover:bg-muted/50 hover:border-primary/30"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-medium leading-tight">{plan.name}</div>
+                    <div className="text-xs text-muted-foreground">{agencyById.get(plan.agency_id)?.name || "Agencia"} · {plan.period_start}–{plan.period_end}</div>
+                  </div>
+                  <Badge variant="outline">{approved}/{planDelivs.length}</Badge>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {items.map((item: PlanItem) => <Badge key={item.id} variant="secondary" className="text-xs">{item.deliverable_type}: {item.target_quantity}</Badge>)}
+                </div>
+              </button>
+            )
+          })}
+        </CardContent>
+      </Card>
     </div>
   )
 }
 
-function KanbanView({ deliverables, agencyById, planById, onStatusChange, onEdit, updatingId, canManage }: any) {
-  return <div className="grid gap-4 xl:grid-cols-5">{FLOW_STATUSES.filter((status) => !["paused", "cancelled"].includes(status.value)).map((status) => { const items = deliverables.filter((deliverable: Deliverable) => deliverable.status === status.value); return <Card key={status.value} className="min-h-[280px]"><CardHeader className="pb-3"><CardTitle className="flex items-center justify-between text-sm">{status.label}<Badge variant="outline">{items.length}</Badge></CardTitle></CardHeader><CardContent className="space-y-3">{items.map((deliverable: Deliverable) => <DeliverableCard key={deliverable.id} deliverable={deliverable} agencyName={agencyById.get(deliverable.agency_id)?.name} planName={planById.get(deliverable.plan_id)?.name} onStatusChange={onStatusChange} onEdit={onEdit} updating={updatingId === deliverable.id} canManage={canManage} />)}</CardContent></Card> })}</div>
+// Agency detail view - shows plans for selected agency
+function AgencyView({ agency, plans, deliverables, planItems, onPlanClick }: any) {
+  const stats = {
+    total: deliverables.length,
+    approved: deliverables.filter((d: Deliverable) => d.status === "approved" || d.status === "published").length,
+    inReview: deliverables.filter((d: Deliverable) => d.status === "in_review" || d.status === "changes_requested").length,
+    overdue: deliverables.filter(isOverdue).length,
+  }
+  
+  return (
+    <div className="space-y-6">
+      {/* Agency stats */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <MetricCard label="Planes" value={plans.length} icon={<Target className="h-4 w-4" />} />
+        <MetricCard label="Entregables" value={stats.total} icon={<ClipboardList className="h-4 w-4" />} />
+        <MetricCard label="Aprobados" value={stats.approved} icon={<CheckCircle2 className="h-4 w-4" />} />
+        <MetricCard label="Atrasados" value={stats.overdue} icon={<AlertCircle className="h-4 w-4" />} danger={stats.overdue > 0} />
+      </div>
+
+      {/* Plans list */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Planes de {agency.name}</CardTitle>
+          <CardDescription>Haz clic en un plan para ver su kanban y entregas.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {plans.length === 0 ? (
+            <Empty message="Esta agencia no tiene planes de producción." />
+          ) : (
+            plans.map((plan: ProductionPlan) => {
+              const items = planItems.filter((item: PlanItem) => item.plan_id === plan.id)
+              const planDelivs = deliverables.filter((d: Deliverable) => d.plan_id === plan.id)
+              const approved = planDelivs.filter((d: Deliverable) => d.status === "approved" || d.status === "published").length
+              const overdue = planDelivs.filter(isOverdue).length
+              
+              return (
+                <button
+                  key={plan.id}
+                  onClick={() => onPlanClick(plan.id)}
+                  className="w-full text-left rounded-xl border p-4 transition-colors hover:bg-muted/50 hover:border-primary/30"
+                >
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <div className="font-medium">{plan.name}</div>
+                      <div className="text-xs text-muted-foreground">{plan.period_start} - {plan.period_end} · {plan.period_type}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      {overdue > 0 && <Badge className="bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300">{overdue} atrasados</Badge>}
+                      <Badge variant="outline">{approved}/{planDelivs.length} aprobados</Badge>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {items.map((item: PlanItem) => <Badge key={item.id} variant="secondary" className="text-xs">{item.deliverable_type}: {item.target_quantity}</Badge>)}
+                  </div>
+                </button>
+              )
+            })
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
 
-function DeliverableCard({ deliverable, agencyName, planName, onStatusChange, onEdit, updating, canManage }: any) {
-  return <div className="rounded-xl border bg-card p-3 shadow-sm"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="font-medium leading-tight">{deliverable.title}</div><div className="mt-1 text-xs text-muted-foreground">{agencyName || "Agencia"} · {planName || "Plan"}</div></div>{isOverdue(deliverable) && <Badge className="bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300">Atrasado</Badge>}</div><div className="mt-3 flex flex-wrap gap-1"><Badge variant="secondary" className="text-xs">{deliverable.deliverable_type}</Badge>{deliverable.channel && <Badge variant="outline" className="text-xs">{deliverable.channel}</Badge>}<Badge className={`text-xs ${statusTone(deliverable.status)}`}>{statusLabel(deliverable.status)}</Badge></div>{deliverable.due_date && <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground"><CalendarDays className="h-3 w-3" /> Vence {deliverable.due_date}</div>}{deliverable.external_url && <a href={deliverable.external_url} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs text-primary hover:underline">Ver link externo <ExternalLink className="h-3 w-3" /></a>}{canManage && <div className="mt-3 flex gap-2"><select className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs" value={deliverable.status} disabled={updating} onChange={(event) => onStatusChange(deliverable, event.target.value)}>{FLOW_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select><Button type="button" size="sm" variant="outline" onClick={() => onEdit(deliverable)}><Edit3 className="h-3 w-3" /></Button></div>}</div>
+// Plan Kanban view - touch-friendly scrollable
+function PlanKanbanView({ deliverables, onStatusChange, onEdit, updatingId, canManage, onCreateDeliverable }: any) {
+  return (
+    <div className="overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0">
+      <div className="flex gap-4 min-w-max md:grid md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8 md:min-w-0">
+        {FLOW_STATUSES.filter((status) => !["paused", "cancelled"].includes(status.value)).map((status) => {
+          const items = deliverables.filter((d: Deliverable) => d.status === status.value)
+          return (
+            <Card key={status.value} className="min-h-[320px] w-[280px] flex-shrink-0 md:w-auto">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between text-sm">
+                  {status.label}
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">{items.length}</Badge>
+                    {canManage && (
+                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => onCreateDeliverable(status.value)}>
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {items.map((deliverable: Deliverable) => (
+                  <PlanDeliverableCard 
+                    key={deliverable.id} 
+                    deliverable={deliverable} 
+                    onStatusChange={onStatusChange} 
+                    onEdit={onEdit} 
+                    updating={updatingId === deliverable.id} 
+                    canManage={canManage} 
+                  />
+                ))}
+                {items.length === 0 && (
+                  <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
+                    Sin entregas
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
-function TableView({ deliverables, agencyById, brandById, planById, onStatusChange, onEdit, updatingId, canManage }: any) {
-  return <Card><CardHeader><CardTitle>Tabla de entregables</CardTitle><CardDescription>Control operativo por agencia, plan, fecha, link y estado.</CardDescription></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-sm"><thead className="border-b text-left text-xs text-muted-foreground"><tr><th className="py-3 pr-4">Entregable</th><th className="py-3 pr-4">Agencia</th><th className="py-3 pr-4">Marca</th><th className="py-3 pr-4">Plan</th><th className="py-3 pr-4">Tipo</th><th className="py-3 pr-4">Prioridad</th><th className="py-3 pr-4">Estado</th><th className="py-3 pr-4">Vence</th><th className="py-3 pr-4">Link</th><th className="py-3 pr-4">Acciones</th></tr></thead><tbody>{deliverables.map((deliverable: Deliverable) => <tr key={deliverable.id} className="border-b last:border-0"><td className="py-3 pr-4 font-medium">{deliverable.title}<div className="text-xs text-muted-foreground line-clamp-1">{deliverable.notes || deliverable.description}</div></td><td className="py-3 pr-4">{agencyById.get(deliverable.agency_id)?.name || "—"}</td><td className="py-3 pr-4">{deliverable.brand_id ? brandById.get(deliverable.brand_id)?.name || "—" : "—"}</td><td className="py-3 pr-4">{planById.get(deliverable.plan_id)?.name || "—"}</td><td className="py-3 pr-4">{deliverable.deliverable_type}</td><td className="py-3 pr-4 capitalize">{deliverable.priority}</td><td className="py-3 pr-4">{canManage ? <select className="h-9 rounded-md border border-input bg-background px-2 text-xs" value={deliverable.status} disabled={updatingId === deliverable.id} onChange={(event) => onStatusChange(deliverable, event.target.value)}>{FLOW_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select> : <Badge className={statusTone(deliverable.status)}>{statusLabel(deliverable.status)}</Badge>}</td><td className="py-3 pr-4"><span className={isOverdue(deliverable) ? "font-medium text-red-600" : ""}>{deliverable.due_date || "—"}</span></td><td className="py-3 pr-4">{deliverable.external_url ? <a href={deliverable.external_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">Abrir <ExternalLink className="h-3 w-3" /></a> : "—"}</td><td className="py-3 pr-4">{canManage ? <Button size="sm" variant="outline" onClick={() => onEdit(deliverable)}><Edit3 className="mr-2 h-3 w-3" />Editar</Button> : "—"}</td></tr>)}</tbody></table></div>{deliverables.length === 0 && <Empty message="No hay entregables con los filtros actuales." />}</CardContent></Card>
+// Simplified deliverable card for plan view (no agency/plan name needed)
+function PlanDeliverableCard({ deliverable, onStatusChange, onEdit, updating, canManage }: any) {
+  return (
+    <div className="rounded-xl border bg-card p-3 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="font-medium leading-tight">{deliverable.title}</div>
+          {deliverable.description && <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{deliverable.description}</div>}
+        </div>
+        {isOverdue(deliverable) && <Badge className="bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 flex-shrink-0">Atrasado</Badge>}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1">
+        <Badge variant="secondary" className="text-xs">{deliverable.deliverable_type}</Badge>
+        {deliverable.channel && <Badge variant="outline" className="text-xs">{deliverable.channel}</Badge>}
+        <Badge variant="outline" className="text-xs capitalize">{deliverable.priority}</Badge>
+      </div>
+      {deliverable.due_date && (
+        <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
+          <CalendarDays className="h-3 w-3" /> Vence {deliverable.due_date}
+        </div>
+      )}
+      {deliverable.external_url && (
+        <a href={deliverable.external_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline">
+          Ver link <ExternalLink className="h-3 w-3" />
+        </a>
+      )}
+      {canManage && (
+        <div className="mt-3 flex gap-2">
+          <select 
+            className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs" 
+            value={deliverable.status} 
+            disabled={updating} 
+            onChange={(e) => onStatusChange(deliverable, e.target.value)}
+          >
+            {FLOW_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <Button type="button" size="sm" variant="outline" onClick={() => onEdit(deliverable)}>
+            <Edit3 className="h-3 w-3" />
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Plan table view
+function PlanTableView({ deliverables, brandById, onStatusChange, onEdit, updatingId, canManage }: any) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Entregas del plan</CardTitle>
+        <CardDescription>Vista de tabla con todos los entregables de este plan.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[800px] text-sm">
+            <thead className="border-b text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="py-3 pr-4">Entregable</th>
+                <th className="py-3 pr-4">Tipo</th>
+                <th className="py-3 pr-4">Canal</th>
+                <th className="py-3 pr-4">Prioridad</th>
+                <th className="py-3 pr-4">Estado</th>
+                <th className="py-3 pr-4">Vence</th>
+                <th className="py-3 pr-4">Link</th>
+                <th className="py-3 pr-4">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {deliverables.map((d: Deliverable) => (
+                <tr key={d.id} className="border-b last:border-0">
+                  <td className="py-3 pr-4">
+                    <div className="font-medium">{d.title}</div>
+                    {d.notes && <div className="text-xs text-muted-foreground line-clamp-1">{d.notes}</div>}
+                  </td>
+                  <td className="py-3 pr-4">{d.deliverable_type}</td>
+                  <td className="py-3 pr-4">{d.channel || "—"}</td>
+                  <td className="py-3 pr-4 capitalize">{d.priority}</td>
+                  <td className="py-3 pr-4">
+                    {canManage ? (
+                      <select 
+                        className="h-9 rounded-md border border-input bg-background px-2 text-xs" 
+                        value={d.status} 
+                        disabled={updatingId === d.id} 
+                        onChange={(e) => onStatusChange(d, e.target.value)}
+                      >
+                        {FLOW_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
+                    ) : (
+                      <Badge className={statusTone(d.status)}>{statusLabel(d.status)}</Badge>
+                    )}
+                  </td>
+                  <td className="py-3 pr-4">
+                    <span className={isOverdue(d) ? "font-medium text-red-600" : ""}>{d.due_date || "—"}</span>
+                  </td>
+                  <td className="py-3 pr-4">
+                    {d.external_url ? (
+                      <a href={d.external_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    ) : "—"}
+                  </td>
+                  <td className="py-3 pr-4">
+                    {canManage && (
+                      <Button size="sm" variant="outline" onClick={() => onEdit(d)}>
+                        <Edit3 className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {deliverables.length === 0 && <Empty message="No hay entregas en este plan." />}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Create deliverable dialog
+function CreateDeliverableDialog({ open, onClose, onCreate, status, creating }: { open: boolean; onClose: () => void; onCreate: (title: string, status: string) => void; status: string; creating: boolean }) {
+  const [title, setTitle] = useState("")
+  
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    onCreate(title, status)
+    setTitle("")
+  }
+  
+  if (!open) return null
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <Card className="w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+        <CardHeader>
+          <CardTitle>Crear entregable</CardTitle>
+          <CardDescription>Se creará con estado: {statusLabel(status)}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Field label="Título">
+              <Input 
+                value={title} 
+                onChange={(e) => setTitle(e.target.value)} 
+                placeholder="Nombre del entregable" 
+                required 
+                autoFocus
+              />
+            </Field>
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+              <Button type="submit" disabled={creating}>
+                {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Crear
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
 
 function SetupView(props: any) {
