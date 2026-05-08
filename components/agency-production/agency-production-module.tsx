@@ -1,7 +1,9 @@
 "use client"
 
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react"
+import { FormEvent, ReactNode, useEffect, useMemo, useState, useCallback } from "react"
 import Link from "next/link"
+import dynamic from "next/dynamic"
+import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DroppableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd"
 import { supabase } from "@/lib/supabase"
 import { useUser } from "@/components/user-provider"
 import { Button } from "@/components/ui/button"
@@ -10,6 +12,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
 import {
   AlertCircle,
@@ -19,13 +23,15 @@ import {
   ClipboardList,
   Edit3,
   ExternalLink,
-  Filter,
-  LayoutGrid,
+  GripVertical,
   Loader2,
+  MoreHorizontal,
+  Palette,
   Plus,
   RefreshCw,
   Save,
   Search,
+  Settings2,
   ShieldAlert,
   Target,
   Trash2,
@@ -43,18 +49,6 @@ type Agency = {
   contact_email: string | null
   contact_phone: string | null
   notes: string | null
-  created_at: string
-}
-
-type AgencyMember = {
-  id: string
-  agency_id: string
-  name: string
-  email: string
-  phone: string | null
-  role: string | null
-  position: string | null
-  is_active: boolean
   created_at: string
 }
 
@@ -101,6 +95,7 @@ type Deliverable = {
   channel: string | null
   format: string | null
   status: string
+  stage_id: string | null
   priority: string
   due_date: string | null
   delivered_at: string | null
@@ -110,6 +105,25 @@ type Deliverable = {
   external_url: string | null
   notes: string | null
   position: number | null
+  created_at: string
+}
+
+type PlanStage = {
+  id: string
+  plan_id: string
+  name: string
+  position: number
+  color: string | null
+  created_at: string
+}
+
+type StageTemplate = {
+  id: string
+  name: string
+  description: string | null
+  stages: { name: string; position: number; color: string }[]
+  is_system: boolean
+  created_by: string | null
   created_at: string
 }
 
@@ -232,26 +246,33 @@ export function AgencyProductionModule() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [schemaError, setSchemaError] = useState<string | null>(null)
-  const [activeView, setActiveView] = useState<"dashboard" | "kanban" | "table" | "setup">("dashboard")
+  const [activeView, setActiveView] = useState<"dashboard" | "agency" | "plan" | "setup">("dashboard")
+  
+  // Hierarchical selection state
+  const [selectedAgencyId, setSelectedAgencyId] = useState<string | null>(null)
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
+  const [planViewMode, setPlanViewMode] = useState<"kanban" | "table">("kanban")
+  
+  // Create deliverable dialog
+  const [createDeliverableOpen, setCreateDeliverableOpen] = useState(false)
+  const [createDeliverableStatus, setCreateDeliverableStatus] = useState<string>("pending")
+  const [creatingDeliverable, setCreatingDeliverable] = useState(false)
 
   const [agencies, setAgencies] = useState<Agency[]>([])
-  const [agencyMembers, setAgencyMembers] = useState<AgencyMember[]>([])
   const [brands, setBrands] = useState<Brand[]>([])
   const [plans, setPlans] = useState<ProductionPlan[]>([])
   const [planItems, setPlanItems] = useState<PlanItem[]>([])
   const [deliverables, setDeliverables] = useState<Deliverable[]>([])
-
-  const [agencyFilter, setAgencyFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [typeFilter, setTypeFilter] = useState("all")
-  const [overdueFilter, setOverdueFilter] = useState("all")
-  const [search, setSearch] = useState("")
+  const [planStages, setPlanStages] = useState<PlanStage[]>([])
+  const [stageTemplates, setStageTemplates] = useState<StageTemplate[]>([])
+  
+  // Stage management
+  const [stageDialogOpen, setStageDialogOpen] = useState(false)
+  const [editingStage, setEditingStage] = useState<PlanStage | null>(null)
+  const [stageForm, setStageForm] = useState({ name: "", color: "#94a3b8" })
+  const [savingStage, setSavingStage] = useState(false)
 
   const [agencyForm, setAgencyForm] = useState({ name: "", type: "", contact_name: "", contact_email: "", notes: "" })
-  const [agencyMemberForm, setAgencyMemberForm] = useState({ agency_id: "", name: "", email: "", phone: "", role: "", position: "" })
-  const [editingAgencyMember, setEditingAgencyMember] = useState<AgencyMember | null>(null)
-  const [creatingAgencyMember, setCreatingAgencyMember] = useState(false)
-  const [selectedAgencyForMembers, setSelectedAgencyForMembers] = useState<string | null>(null)
   const [brandForm, setBrandForm] = useState({ name: "", description: "" })
   const [planForm, setPlanForm] = useState({
     name: "",
@@ -281,26 +302,14 @@ export function AgencyProductionModule() {
   const agencyById = useMemo(() => new Map(agencies.map((agency) => [agency.id, agency])), [agencies])
   const brandById = useMemo(() => new Map(brands.map((brand) => [brand.id, brand])), [brands])
   const planById = useMemo(() => new Map(plans.map((plan) => [plan.id, plan])), [plans])
-  const availableTypes = useMemo(() => Array.from(new Set([...DEFAULT_TYPES, ...deliverables.map((item) => item.deliverable_type)].filter(Boolean))), [deliverables])
-
-  const filteredDeliverables = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return deliverables.filter((deliverable) => {
-      if (agencyFilter !== "all" && deliverable.agency_id !== agencyFilter) return false
-      if (statusFilter !== "all" && deliverable.status !== statusFilter) return false
-      if (typeFilter !== "all" && deliverable.deliverable_type !== typeFilter) return false
-      if (overdueFilter === "overdue" && !isOverdue(deliverable)) return false
-      if (overdueFilter === "not_overdue" && isOverdue(deliverable)) return false
-      if (!q) return true
-      const agencyName = agencyById.get(deliverable.agency_id)?.name || ""
-      const planName = planById.get(deliverable.plan_id)?.name || ""
-      return [deliverable.title, deliverable.description, deliverable.deliverable_type, agencyName, planName, deliverable.notes]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
-    })
-  }, [agencyFilter, statusFilter, typeFilter, overdueFilter, search, deliverables, agencyById, planById])
+  
+  // Derived data for selected agency/plan
+  const selectedAgency = selectedAgencyId ? agencyById.get(selectedAgencyId) : null
+  const selectedPlan = selectedPlanId ? planById.get(selectedPlanId) : null
+  const agencyPlans = useMemo(() => selectedAgencyId ? plans.filter(p => p.agency_id === selectedAgencyId) : [], [plans, selectedAgencyId])
+  const planDeliverables = useMemo(() => selectedPlanId ? deliverables.filter(d => d.plan_id === selectedPlanId) : [], [deliverables, selectedPlanId])
+  const agencyDeliverables = useMemo(() => selectedAgencyId ? deliverables.filter(d => d.agency_id === selectedAgencyId) : [], [deliverables, selectedAgencyId])
+  const selectedPlanStages = useMemo(() => selectedPlanId ? planStages.filter(s => s.plan_id === selectedPlanId).sort((a, b) => a.position - b.position) : [], [planStages, selectedPlanId])
 
   const stats = useMemo(() => {
     const total = deliverables.length
@@ -372,24 +381,26 @@ export function AgencyProductionModule() {
   async function loadData() {
     setRefreshing(true)
     try {
-      const [agenciesRes, agencyMembersRes, brandsRes, plansRes, planItemsRes, deliverablesRes] = await Promise.all([
+      const [agenciesRes, brandsRes, plansRes, planItemsRes, deliverablesRes, stagesRes, templatesRes] = await Promise.all([
         supabase.from("agencies").select("*").order("created_at", { ascending: false }),
-        supabase.from("agency_members").select("*").order("name", { ascending: true }),
         supabase.from("brands").select("*").order("name", { ascending: true }),
         supabase.from("production_plans").select("*").order("created_at", { ascending: false }),
         supabase.from("production_plan_items").select("*").order("created_at", { ascending: true }),
         supabase.from("production_deliverables").select("*").order("created_at", { ascending: false }),
+        supabase.from("production_plan_stages").select("*").order("position", { ascending: true }),
+        supabase.from("production_stage_templates").select("*").order("is_system", { ascending: false }),
       ])
 
-      const firstError = [agenciesRes.error, agencyMembersRes.error, brandsRes.error, plansRes.error, planItemsRes.error, deliverablesRes.error].find(Boolean)
+      const firstError = [agenciesRes.error, brandsRes.error, plansRes.error, planItemsRes.error, deliverablesRes.error, stagesRes.error, templatesRes.error].find(Boolean)
       if (firstError) throw firstError
 
       setAgencies((agenciesRes.data || []) as Agency[])
-      setAgencyMembers((agencyMembersRes.data || []) as AgencyMember[])
       setBrands((brandsRes.data || []) as Brand[])
       setPlans((plansRes.data || []) as ProductionPlan[])
       setPlanItems((planItemsRes.data || []) as PlanItem[])
       setDeliverables((deliverablesRes.data || []) as Deliverable[])
+      setPlanStages((stagesRes.data || []) as PlanStage[])
+      setStageTemplates((templatesRes.data || []) as StageTemplate[])
     } catch (error: any) {
       setSchemaError(error?.message || "No se pudo cargar el módulo de agencias")
     } finally {
@@ -421,70 +432,6 @@ export function AgencyProductionModule() {
       setCreatingAgency(false)
     }
   }
-
-  // Agency Members CRUD
-  async function createAgencyMember(event: FormEvent) {
-    event.preventDefault()
-    if (!canManageProduction) return toast.error("Solo admins pueden agregar miembros")
-    if (!agencyMemberForm.agency_id || !agencyMemberForm.name.trim() || !agencyMemberForm.email.trim()) {
-      return toast.error("Nombre y email son requeridos")
-    }
-    setCreatingAgencyMember(true)
-    try {
-      const { error } = await supabase.from("agency_members").insert({
-        agency_id: agencyMemberForm.agency_id,
-        name: agencyMemberForm.name.trim(),
-        email: agencyMemberForm.email.trim().toLowerCase(),
-        phone: agencyMemberForm.phone.trim() || null,
-        role: agencyMemberForm.role.trim() || null,
-        position: agencyMemberForm.position.trim() || null,
-      })
-      if (error) throw error
-      toast.success("Miembro agregado")
-      setAgencyMemberForm({ agency_id: agencyMemberForm.agency_id, name: "", email: "", phone: "", role: "", position: "" })
-      await loadData()
-    } catch (error: any) {
-      toast.error(error.message || "No se pudo agregar el miembro")
-    } finally {
-      setCreatingAgencyMember(false)
-    }
-  }
-
-  async function updateAgencyMember(member: AgencyMember) {
-    if (!canManageProduction) return toast.error("Solo admins pueden editar miembros")
-    try {
-      const { error } = await supabase.from("agency_members").update({
-        name: member.name,
-        email: member.email.toLowerCase(),
-        phone: member.phone,
-        role: member.role,
-        position: member.position,
-        is_active: member.is_active,
-      }).eq("id", member.id)
-      if (error) throw error
-      toast.success("Miembro actualizado")
-      setEditingAgencyMember(null)
-      await loadData()
-    } catch (error: any) {
-      toast.error(error.message || "No se pudo actualizar el miembro")
-    }
-  }
-
-  async function deleteAgencyMember(memberId: string) {
-    if (!canManageProduction) return toast.error("Solo admins pueden eliminar miembros")
-    if (!confirm("Eliminar este miembro de la agencia?")) return
-    try {
-      const { error } = await supabase.from("agency_members").delete().eq("id", memberId)
-      if (error) throw error
-      toast.success("Miembro eliminado")
-      await loadData()
-    } catch (error: any) {
-      toast.error(error.message || "No se pudo eliminar el miembro")
-    }
-  }
-
-  // Get members for a specific agency
-  const getMembersForAgency = (agencyId: string) => agencyMembers.filter(m => m.agency_id === agencyId && m.is_active)
 
   async function createBrand(event: FormEvent) {
     event.preventDefault()
@@ -541,6 +488,27 @@ export function AgencyProductionModule() {
         .single()
       if (planError) throw planError
 
+      // Create default stages from first template (Producción estándar)
+      const defaultTemplate = stageTemplates.find(t => t.is_system) || stageTemplates[0]
+      if (defaultTemplate?.stages?.length) {
+        const stageRows = defaultTemplate.stages.map((s, i) => ({
+          plan_id: plan.id,
+          name: s.name,
+          position: i,
+          color: s.color || null,
+        }))
+        const { data: createdStages, error: stagesError } = await supabase
+          .from("production_plan_stages")
+          .insert(stageRows)
+          .select()
+        if (stagesError) throw stagesError
+        
+        // Use first stage for new deliverables
+        var firstStageId = createdStages?.[0]?.id || null
+      } else {
+        var firstStageId = null
+      }
+
       const rows: any[] = []
       let globalIndex = 0
 
@@ -571,6 +539,7 @@ export function AgencyProductionModule() {
             channel: draft.channel.trim() || null,
             format: draft.format.trim() || null,
             status: "pending",
+            stage_id: firstStageId,
             priority: "medium",
             due_date: distributedDueDate(globalIndex, totalDeliverables, planForm.period_start, planForm.period_end, planForm.date_strategy),
             responsible_internal_id: selectedResponsible?.id || user?.id || null,
@@ -611,6 +580,119 @@ export function AgencyProductionModule() {
     setSelectedResponsible(null)
     setUserSearchTerm("")
     setUserSearchResults([])
+  }
+
+  // Stage management functions
+  async function createStage(name: string, color: string) {
+    if (!selectedPlanId || !canManageProduction) return
+    setSavingStage(true)
+    try {
+      const currentStages = planStages.filter(s => s.plan_id === selectedPlanId)
+      const nextPosition = currentStages.length > 0 ? Math.max(...currentStages.map(s => s.position)) + 1 : 0
+      
+      const { data, error } = await supabase.from("production_plan_stages").insert({
+        plan_id: selectedPlanId,
+        name: name.trim(),
+        position: nextPosition,
+        color: color || null,
+      }).select().single()
+      
+      if (error) throw error
+      setPlanStages(prev => [...prev, data as PlanStage])
+      setStageDialogOpen(false)
+      setStageForm({ name: "", color: "#94a3b8" })
+      toast.success("Etapa creada")
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo crear la etapa")
+    } finally {
+      setSavingStage(false)
+    }
+  }
+
+  async function updateStage(stageId: string, name: string, color: string) {
+    if (!canManageProduction) return
+    setSavingStage(true)
+    try {
+      const { error } = await supabase.from("production_plan_stages")
+        .update({ name: name.trim(), color: color || null })
+        .eq("id", stageId)
+      
+      if (error) throw error
+      setPlanStages(prev => prev.map(s => s.id === stageId ? { ...s, name: name.trim(), color } : s))
+      setStageDialogOpen(false)
+      setEditingStage(null)
+      setStageForm({ name: "", color: "#94a3b8" })
+      toast.success("Etapa actualizada")
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo actualizar la etapa")
+    } finally {
+      setSavingStage(false)
+    }
+  }
+
+  async function deleteStage(stageId: string) {
+    if (!canManageProduction) return
+    if (!confirm("¿Eliminar esta etapa? Los entregables se quedarán sin etapa asignada.")) return
+    
+    try {
+      const { error } = await supabase.from("production_plan_stages").delete().eq("id", stageId)
+      if (error) throw error
+      setPlanStages(prev => prev.filter(s => s.id !== stageId))
+      // Clear stage_id from affected deliverables
+      setDeliverables(prev => prev.map(d => d.stage_id === stageId ? { ...d, stage_id: null } : d))
+      toast.success("Etapa eliminada")
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo eliminar la etapa")
+    }
+  }
+
+  async function moveDeliverableToStage(deliverableId: string, newStageId: string | null) {
+    if (!canManageProduction) return
+    try {
+      const { error } = await supabase.from("production_deliverables")
+        .update({ stage_id: newStageId })
+        .eq("id", deliverableId)
+      
+      if (error) throw error
+      setDeliverables(prev => prev.map(d => d.id === deliverableId ? { ...d, stage_id: newStageId } : d))
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo mover el entregable")
+    }
+  }
+
+  // Drag and drop handler for kanban
+  const handleDragEnd = useCallback(async (result: DropResult) => {
+    if (!result.destination || !canManageProduction) return
+    
+    const deliverableId = result.draggableId
+    const newStageId = result.destination.droppableId === "unassigned" ? null : result.destination.droppableId
+    
+    // Optimistic update
+    setDeliverables(prev => prev.map(d => d.id === deliverableId ? { ...d, stage_id: newStageId } : d))
+    
+    try {
+      const { error } = await supabase.from("production_deliverables")
+        .update({ stage_id: newStageId })
+        .eq("id", deliverableId)
+      
+      if (error) throw error
+    } catch (error: any) {
+      // Revert on error
+      await loadData()
+      toast.error("No se pudo mover el entregable")
+    }
+  }, [canManageProduction])
+
+  function openCreateStageDialog() {
+    setEditingStage(null)
+    setStageForm({ name: "", color: "#94a3b8" })
+    setStageDialogOpen(true)
+  }
+
+  function openEditStageDialog(stage: PlanStage) {
+    setEditingStage(stage)
+    setStageForm({ name: stage.name, color: stage.color || "#94a3b8" })
+    setStageDialogOpen(true)
   }
 
   function startEditDeliverable(deliverable: Deliverable) {
@@ -669,40 +751,129 @@ export function AgencyProductionModule() {
     }
   }
 
-  async function updateDeliverableStatus(deliverable: Deliverable, nextStatus: string) {
-    if (!canManageProduction) return toast.error("Solo admins pueden cambiar estados")
-    setUpdatingDeliverableId(deliverable.id)
-    const now = new Date().toISOString()
-    const timestampFields: Record<string, string | null> = {}
-    if (nextStatus === "delivered" && !deliverable.delivered_at) timestampFields.delivered_at = now
-    if (nextStatus === "approved" && !deliverable.approved_at) timestampFields.approved_at = now
-    if (nextStatus === "published" && !deliverable.published_at) timestampFields.published_at = now
+  async function createDeliverable(title: string, stageId: string | null) {
+    if (!selectedPlanId || !selectedAgencyId) return toast.error("Selecciona un plan primero")
+    if (!title.trim()) return toast.error("El título es requerido")
+    setCreatingDeliverable(true)
     try {
-      const { error } = await supabase.from("production_deliverables").update({ status: nextStatus, updated_at: now, ...timestampFields }).eq("id", deliverable.id)
+      const plan = planById.get(selectedPlanId)
+      const { data, error } = await supabase.from("production_deliverables").insert({
+        plan_id: selectedPlanId,
+        agency_id: selectedAgencyId,
+        brand_id: plan?.brand_id || null,
+        title: title.trim(),
+        deliverable_type: "Tarea",
+        status: "pending",
+        stage_id: stageId,
+        priority: "medium",
+        created_by: user?.id || null,
+      }).select().single()
       if (error) throw error
-      setDeliverables((prev) => prev.map((item) => (item.id === deliverable.id ? { ...item, status: nextStatus, ...timestampFields } : item)))
+      setDeliverables(prev => [data as Deliverable, ...prev])
+      setCreateDeliverableOpen(false)
+      toast.success("Entregable creado")
     } catch (error: any) {
-      toast.error(error.message || "No se pudo actualizar el entregable")
+      toast.error(error.message || "No se pudo crear el entregable")
     } finally {
-      setUpdatingDeliverableId(null)
+      setCreatingDeliverable(false)
     }
   }
 
   if (userLoading || loading) return <LoadingState />
   if (schemaError) return <SchemaMissing message={schemaError} onRetry={loadModule} />
 
+  // Navigation helpers
+  const goToAgency = (agencyId: string) => {
+    setSelectedAgencyId(agencyId)
+    setSelectedPlanId(null)
+    setActiveView("agency")
+  }
+  const goToPlan = async (planId: string) => {
+    const plan = planById.get(planId)
+    if (plan) {
+      setSelectedAgencyId(plan.agency_id)
+      setSelectedPlanId(planId)
+      setActiveView("plan")
+      
+      // Auto-create stages if plan doesn't have any
+      const existingStages = planStages.filter(s => s.plan_id === planId)
+      if (existingStages.length === 0 && canManageProduction) {
+        const defaultTemplate = stageTemplates.find(t => t.is_system) || stageTemplates[0]
+        if (defaultTemplate?.stages?.length) {
+          try {
+            const stageRows = defaultTemplate.stages.map((s, i) => ({
+              plan_id: planId,
+              name: s.name,
+              position: i,
+              color: s.color || null,
+            }))
+            const { data: createdStages, error } = await supabase
+              .from("production_plan_stages")
+              .insert(stageRows)
+              .select()
+            if (!error && createdStages) {
+              setPlanStages(prev => [...prev, ...(createdStages as PlanStage[])])
+              toast.success("Etapas creadas automáticamente")
+            }
+          } catch (e) {
+            console.error("Error creating default stages:", e)
+          }
+        }
+      }
+    }
+  }
+  const goBack = () => {
+    if (activeView === "plan") {
+      setSelectedPlanId(null)
+      setActiveView("agency")
+    } else if (activeView === "agency") {
+      setSelectedAgencyId(null)
+      setActiveView("dashboard")
+    } else {
+      setActiveView("dashboard")
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeader refreshing={refreshing} onRefresh={loadData} canManage={canManageProduction} onCreate={() => setActiveView("setup")} />
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-        <MetricCard label="Planes activos" value={stats.activePlans} icon={<Target className="h-4 w-4" />} />
-        <MetricCard label="Entregables" value={stats.total} icon={<ClipboardList className="h-4 w-4" />} />
-        <MetricCard label="Aprobados" value={stats.approved} icon={<CheckCircle2 className="h-4 w-4" />} />
-        <MetricCard label="En revisión" value={stats.inReview} icon={<LayoutGrid className="h-4 w-4" />} />
-        <MetricCard label="Atrasados" value={stats.overdue} icon={<AlertCircle className="h-4 w-4" />} danger={stats.overdue > 0} />
-        <MetricCard label="Cumplimiento" value={`${stats.completion}%`} icon={<Target className="h-4 w-4" />} />
+      {/* Header with breadcrumb navigation */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Building2 className="h-4 w-4" />
+            <button onClick={() => { setSelectedAgencyId(null); setSelectedPlanId(null); setActiveView("dashboard") }} className="hover:text-foreground">Agencias</button>
+            {selectedAgency && <><span>/</span><button onClick={() => goToAgency(selectedAgency.id)} className="hover:text-foreground">{selectedAgency.name}</button></>}
+            {selectedPlan && <><span>/</span><span>{selectedPlan.name}</span></>}
+          </div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+            {selectedPlan ? selectedPlan.name : selectedAgency ? selectedAgency.name : "Producción de Agencias"}
+          </h1>
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            {selectedPlan ? `Plan de ${selectedAgency?.name} · ${selectedPlan.period_start} - ${selectedPlan.period_end}` 
+              : selectedAgency ? `${selectedAgency.type || "Agencia"} · ${agencyPlans.length} planes · ${agencyDeliverables.length} entregables`
+              : "Controla producción por agencia: planes, entregables, estados y cumplimiento."}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(selectedAgency || selectedPlan) && <Button variant="outline" size="sm" onClick={goBack}><X className="mr-2 h-4 w-4" />Volver</Button>}
+          <Button variant="outline" size="sm" onClick={loadData} disabled={refreshing}>{refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Actualizar</Button>
+          {canManageProduction && !selectedPlan && <Button size="sm" onClick={() => setActiveView("setup")}><Plus className="mr-2 h-4 w-4" />Crear plan</Button>}
+        </div>
       </div>
 
+      {/* Global stats only on dashboard */}
+      {activeView === "dashboard" && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+          <MetricCard label="Agencias" value={agencies.length} icon={<Building2 className="h-4 w-4" />} />
+          <MetricCard label="Planes activos" value={stats.activePlans} icon={<Target className="h-4 w-4" />} />
+          <MetricCard label="Entregables" value={stats.total} icon={<ClipboardList className="h-4 w-4" />} />
+          <MetricCard label="Aprobados" value={stats.approved} icon={<CheckCircle2 className="h-4 w-4" />} />
+          <MetricCard label="Atrasados" value={stats.overdue} icon={<AlertCircle className="h-4 w-4" />} danger={stats.overdue > 0} />
+          <MetricCard label="Cumplimiento" value={`${stats.completion}%`} icon={<Target className="h-4 w-4" />} />
+        </div>
+      )}
+
+      {/* Edit panel */}
       {editingDeliverable && deliverableForm && (
         <EditDeliverablePanel
           form={deliverableForm}
@@ -713,52 +884,112 @@ export function AgencyProductionModule() {
         />
       )}
 
-      <div className="flex flex-wrap gap-2 border-b pb-2">
-        <ViewButton active={activeView === "dashboard"} onClick={() => setActiveView("dashboard")} label="Dashboard" />
-        <ViewButton active={activeView === "kanban"} onClick={() => setActiveView("kanban")} label="Kanban" />
-        <ViewButton active={activeView === "table"} onClick={() => setActiveView("table")} label="Tabla" />
-        {canManageProduction && <ViewButton active={activeView === "setup"} onClick={() => setActiveView("setup")} label="Configuración" />}
-      </div>
+      {/* View tabs - only on dashboard */}
+      {activeView === "dashboard" && (
+        <div className="flex flex-wrap gap-2 border-b pb-2">
+          <ViewButton active={true} onClick={() => {}} label="Dashboard" />
+          {canManageProduction && <ViewButton active={false} onClick={() => setActiveView("setup")} label="Configuración" />}
+        </div>
+      )}
 
-      {activeView !== "setup" && (
-        <Filters
-          agencies={agencies}
-          availableTypes={availableTypes}
-          agencyFilter={agencyFilter}
-          setAgencyFilter={setAgencyFilter}
-          statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
-          typeFilter={typeFilter}
-          setTypeFilter={setTypeFilter}
-          overdueFilter={overdueFilter}
-          setOverdueFilter={setOverdueFilter}
-          search={search}
-          setSearch={setSearch}
+      {/* Agency view tabs */}
+      {activeView === "agency" && (
+        <div className="flex flex-wrap gap-2 border-b pb-2">
+          <ViewButton active={true} onClick={() => {}} label="Planes" />
+        </div>
+      )}
+
+      {/* Plan view tabs */}
+      {activeView === "plan" && (
+        <div className="flex flex-wrap gap-2 border-b pb-2">
+          <ViewButton active={planViewMode === "kanban"} onClick={() => setPlanViewMode("kanban")} label="Kanban" />
+          <ViewButton active={planViewMode === "table"} onClick={() => setPlanViewMode("table")} label="Tabla" />
+        </div>
+      )}
+
+      {/* Dashboard view - clickable agencies */}
+      {activeView === "dashboard" && (
+        <DashboardView 
+          summaries={agencySummaries} 
+          plans={plans} 
+          planItems={planItems} 
+          deliverables={deliverables} 
+          agencyById={agencyById}
+          onAgencyClick={goToAgency}
+          onPlanClick={goToPlan}
         />
       )}
 
-      {activeView === "dashboard" && <DashboardView summaries={agencySummaries} plans={plans} planItems={planItems} deliverables={deliverables} agencyById={agencyById} />}
-      {activeView === "kanban" && <KanbanView deliverables={filteredDeliverables} agencyById={agencyById} planById={planById} onStatusChange={updateDeliverableStatus} onEdit={startEditDeliverable} updatingId={updatingDeliverableId} canManage={canManageProduction} />}
-      {activeView === "table" && <TableView deliverables={filteredDeliverables} agencyById={agencyById} brandById={brandById} planById={planById} onStatusChange={updateDeliverableStatus} onEdit={startEditDeliverable} updatingId={updatingDeliverableId} canManage={canManageProduction} />}
+      {/* Agency view - list of plans */}
+      {activeView === "agency" && selectedAgency && (
+        <AgencyView
+          agency={selectedAgency}
+          plans={agencyPlans}
+          deliverables={agencyDeliverables}
+          planItems={planItems}
+          onPlanClick={goToPlan}
+        />
+      )}
+
+      {/* Plan view - kanban or table */}
+      {activeView === "plan" && selectedPlan && (
+        <>
+          {planViewMode === "kanban" && (
+            <PlanKanbanView 
+              stages={selectedPlanStages}
+              deliverables={planDeliverables}
+              onDragEnd={handleDragEnd}
+              onEdit={startEditDeliverable} 
+              onEditStage={openEditStageDialog}
+              onDeleteStage={deleteStage}
+              onCreateStage={openCreateStageDialog}
+              onCreateDeliverable={(stageId: string | null) => { setCreateDeliverableStatus(stageId || ""); setCreateDeliverableOpen(true) }}
+              updatingId={updatingDeliverableId} 
+              canManage={canManageProduction}
+            />
+          )}
+          {planViewMode === "table" && (
+            <PlanTableView 
+              stages={selectedPlanStages}
+              deliverables={planDeliverables} 
+              brandById={brandById}
+              onEdit={startEditDeliverable} 
+              updatingId={updatingDeliverableId} 
+              canManage={canManageProduction}
+            />
+          )}
+          
+          {/* Create deliverable dialog */}
+          <CreateDeliverableDialog
+            open={createDeliverableOpen}
+            onClose={() => setCreateDeliverableOpen(false)}
+            onCreate={createDeliverable}
+            stageId={createDeliverableStatus}
+            stages={selectedPlanStages}
+            creating={creatingDeliverable}
+          />
+
+          {/* Stage edit dialog */}
+          <StageDialog
+            open={stageDialogOpen}
+            onClose={() => { setStageDialogOpen(false); setEditingStage(null) }}
+            stage={editingStage}
+            form={stageForm}
+            setForm={setStageForm}
+            onSave={() => editingStage ? updateStage(editingStage.id, stageForm.name, stageForm.color) : createStage(stageForm.name, stageForm.color)}
+            saving={savingStage}
+          />
+        </>
+      )}
+
+      {/* Setup view */}
       {activeView === "setup" && (
         canManageProduction ? (
           <SetupView
             agencies={agencies}
-            agencyMembers={agencyMembers}
             brands={brands}
             agencyForm={agencyForm}
             setAgencyForm={setAgencyForm}
-            agencyMemberForm={agencyMemberForm}
-            setAgencyMemberForm={setAgencyMemberForm}
-            editingAgencyMember={editingAgencyMember}
-            setEditingAgencyMember={setEditingAgencyMember}
-            createAgencyMember={createAgencyMember}
-            updateAgencyMember={updateAgencyMember}
-            deleteAgencyMember={deleteAgencyMember}
-            creatingAgencyMember={creatingAgencyMember}
-            selectedAgencyForMembers={selectedAgencyForMembers}
-            setSelectedAgencyForMembers={setSelectedAgencyForMembers}
-            getMembersForAgency={getMembersForAgency}
             brandForm={brandForm}
             setBrandForm={setBrandForm}
             planForm={planForm}
@@ -784,22 +1015,6 @@ export function AgencyProductionModule() {
   )
 }
 
-function PageHeader({ refreshing, onRefresh, canManage, onCreate }: { refreshing: boolean; onRefresh: () => void; canManage: boolean; onCreate: () => void }) {
-  return (
-    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-      <div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground"><Building2 className="h-4 w-4" /> Creative Ops / Agency Operations</div>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Producción de Agencias</h1>
-        <p className="max-w-3xl text-sm text-muted-foreground">Controla producción flexible por agencia: planes, entregables, fechas, links externos, estados y cumplimiento.</p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>{refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Actualizar</Button>
-        {canManage && <Button size="sm" onClick={onCreate}><Plus className="mr-2 h-4 w-4" />Crear plan</Button>}
-      </div>
-    </div>
-  )
-}
-
 function LoadingState() {
   return <div className="flex h-full w-full items-center justify-center py-24"><div className="flex flex-col items-center gap-3"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /><p className="text-sm text-muted-foreground">Cargando producción de agencias...</p></div></div>
 }
@@ -812,60 +1027,513 @@ function ViewButton({ active, onClick, label }: { active: boolean; onClick: () =
   return <Button variant={active ? "default" : "outline"} size="sm" onClick={onClick}>{label}</Button>
 }
 
-function Filters(props: any) {
-  const { agencies, availableTypes, agencyFilter, setAgencyFilter, statusFilter, setStatusFilter, typeFilter, setTypeFilter, overdueFilter, setOverdueFilter, search, setSearch } = props
-  return (
-    <Card><CardContent className="grid gap-3 p-4 md:grid-cols-5">
-      <div className="space-y-2 md:col-span-2"><Label className="flex items-center gap-2 text-xs text-muted-foreground"><Filter className="h-3 w-3" /> Buscar</Label><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar entregable, plan, agencia o nota..." /></div>
-      <SelectField label="Agencia" value={agencyFilter} onChange={setAgencyFilter} options={[{ value: "all", label: "Todas" }, ...agencies.map((agency: Agency) => ({ value: agency.id, label: agency.name }))]} />
-      <SelectField label="Estado" value={statusFilter} onChange={setStatusFilter} options={[{ value: "all", label: "Todos" }, ...FLOW_STATUSES.map((status) => ({ value: status.value, label: status.label }))]} />
-      <SelectField label="Tipo" value={typeFilter} onChange={setTypeFilter} options={[{ value: "all", label: "Todos" }, ...availableTypes.map((type: string) => ({ value: type, label: type }))]} />
-      <SelectField label="Atraso" value={overdueFilter} onChange={setOverdueFilter} options={[{ value: "all", label: "Todos" }, { value: "overdue", label: "Solo atrasados" }, { value: "not_overdue", label: "Sin atraso" }]} />
-    </CardContent></Card>
-  )
-}
-
-function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: { value: string; label: string }[] }) {
-  return <div className="space-y-2"><Label className="text-xs text-muted-foreground">{label}</Label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
-}
-
-function DashboardView({ summaries, plans, planItems, deliverables, agencyById }: any) {
+function DashboardView({ summaries, plans, planItems, deliverables, agencyById, onAgencyClick, onPlanClick }: any) {
   return (
     <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-      <Card><CardHeader><CardTitle>Agencias activas</CardTitle><CardDescription>Cumplimiento y riesgo por agencia.</CardDescription></CardHeader><CardContent className="space-y-3">
-        {summaries.length === 0 ? <Empty message="Crea una agencia para empezar." /> : summaries.map((summary: any) => <div key={summary.agency.id} className="rounded-xl border p-4"><div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div><div className="font-medium">{summary.agency.name}</div><div className="text-xs text-muted-foreground">{summary.agency.type || "Agencia / proveedor"}</div></div><Badge className={summary.overdue > 0 ? "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300" : "bg-muted text-muted-foreground"}>{summary.state}</Badge></div><div className="mt-4 grid grid-cols-5 gap-2 text-center text-sm"><MiniStat label="Total" value={summary.total} /><MiniStat label="Aprobados" value={summary.approved} /><MiniStat label="Revisión" value={summary.inReview} /><MiniStat label="Atrasados" value={summary.overdue} /><MiniStat label="Cumpl." value={`${summary.completion}%`} /></div></div>)}
-      </CardContent></Card>
-      <Card><CardHeader><CardTitle>Planes recientes</CardTitle><CardDescription>Compromisos de producción por periodo.</CardDescription></CardHeader><CardContent className="space-y-3">
-        {plans.length === 0 ? <Empty message="Aún no hay planes de producción." /> : plans.slice(0, 8).map((plan: ProductionPlan) => {
-          const items = planItems.filter((item: PlanItem) => item.plan_id === plan.id)
-          const planDeliverables = deliverables.filter((deliverable: Deliverable) => deliverable.plan_id === plan.id)
-          const approved = planDeliverables.filter((item: Deliverable) => item.status === "approved" || item.status === "published").length
-          return <div key={plan.id} className="rounded-lg border p-3"><div className="flex items-start justify-between gap-2"><div><div className="font-medium leading-tight">{plan.name}</div><div className="text-xs text-muted-foreground">{agencyById.get(plan.agency_id)?.name || "Agencia"} · {plan.period_start}–{plan.period_end}</div></div><Badge variant="outline">{approved}/{planDeliverables.length}</Badge></div><div className="mt-2 flex flex-wrap gap-1">{items.map((item: PlanItem) => <Badge key={item.id} variant="secondary" className="text-xs">{item.deliverable_type}: {item.target_quantity}</Badge>)}</div></div>
-        })}
-      </CardContent></Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Agencias activas</CardTitle>
+          <CardDescription>Haz clic en una agencia para ver sus planes y entregas.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {summaries.length === 0 ? <Empty message="Crea una agencia para empezar." /> : summaries.map((summary: any) => (
+            <button
+              key={summary.agency.id}
+              onClick={() => onAgencyClick(summary.agency.id)}
+              className="w-full text-left rounded-xl border p-4 transition-colors hover:bg-muted/50 hover:border-primary/30"
+            >
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="font-medium">{summary.agency.name}</div>
+                  <div className="text-xs text-muted-foreground">{summary.agency.type || "Agencia / proveedor"}</div>
+                </div>
+                <Badge className={summary.overdue > 0 ? "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300" : "bg-muted text-muted-foreground"}>{summary.state}</Badge>
+              </div>
+              <div className="mt-4 grid grid-cols-5 gap-2 text-center text-sm">
+                <MiniStat label="Total" value={summary.total} />
+                <MiniStat label="Aprobados" value={summary.approved} />
+                <MiniStat label="Revisión" value={summary.inReview} />
+                <MiniStat label="Atrasados" value={summary.overdue} />
+                <MiniStat label="Cumpl." value={`${summary.completion}%`} />
+              </div>
+            </button>
+          ))}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Planes recientes</CardTitle>
+          <CardDescription>Haz clic en un plan para ver su kanban.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {plans.length === 0 ? <Empty message="Aún no hay planes de producción." /> : plans.slice(0, 8).map((plan: ProductionPlan) => {
+            const items = planItems.filter((item: PlanItem) => item.plan_id === plan.id)
+            const planDelivs = deliverables.filter((deliverable: Deliverable) => deliverable.plan_id === plan.id)
+            const approved = planDelivs.filter((item: Deliverable) => item.status === "approved" || item.status === "published").length
+            return (
+              <button
+                key={plan.id}
+                onClick={() => onPlanClick(plan.id)}
+                className="w-full text-left rounded-lg border p-3 transition-colors hover:bg-muted/50 hover:border-primary/30"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-medium leading-tight">{plan.name}</div>
+                    <div className="text-xs text-muted-foreground">{agencyById.get(plan.agency_id)?.name || "Agencia"} · {plan.period_start}–{plan.period_end}</div>
+                  </div>
+                  <Badge variant="outline">{approved}/{planDelivs.length}</Badge>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {items.map((item: PlanItem) => <Badge key={item.id} variant="secondary" className="text-xs">{item.deliverable_type}: {item.target_quantity}</Badge>)}
+                </div>
+              </button>
+            )
+          })}
+        </CardContent>
+      </Card>
     </div>
   )
 }
 
-function KanbanView({ deliverables, agencyById, planById, onStatusChange, onEdit, updatingId, canManage }: any) {
-  return <div className="grid gap-4 xl:grid-cols-5">{FLOW_STATUSES.filter((status) => !["paused", "cancelled"].includes(status.value)).map((status) => { const items = deliverables.filter((deliverable: Deliverable) => deliverable.status === status.value); return <Card key={status.value} className="min-h-[280px]"><CardHeader className="pb-3"><CardTitle className="flex items-center justify-between text-sm">{status.label}<Badge variant="outline">{items.length}</Badge></CardTitle></CardHeader><CardContent className="space-y-3">{items.map((deliverable: Deliverable) => <DeliverableCard key={deliverable.id} deliverable={deliverable} agencyName={agencyById.get(deliverable.agency_id)?.name} planName={planById.get(deliverable.plan_id)?.name} onStatusChange={onStatusChange} onEdit={onEdit} updating={updatingId === deliverable.id} canManage={canManage} />)}</CardContent></Card> })}</div>
+// Agency detail view - shows plans for selected agency
+function AgencyView({ agency, plans, deliverables, planItems, onPlanClick }: any) {
+  const stats = {
+    total: deliverables.length,
+    approved: deliverables.filter((d: Deliverable) => d.status === "approved" || d.status === "published").length,
+    inReview: deliverables.filter((d: Deliverable) => d.status === "in_review" || d.status === "changes_requested").length,
+    overdue: deliverables.filter(isOverdue).length,
+  }
+  
+  return (
+    <div className="space-y-6">
+      {/* Agency stats */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <MetricCard label="Planes" value={plans.length} icon={<Target className="h-4 w-4" />} />
+        <MetricCard label="Entregables" value={stats.total} icon={<ClipboardList className="h-4 w-4" />} />
+        <MetricCard label="Aprobados" value={stats.approved} icon={<CheckCircle2 className="h-4 w-4" />} />
+        <MetricCard label="Atrasados" value={stats.overdue} icon={<AlertCircle className="h-4 w-4" />} danger={stats.overdue > 0} />
+      </div>
+
+      {/* Plans list */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Planes de {agency.name}</CardTitle>
+          <CardDescription>Haz clic en un plan para ver su kanban y entregas.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {plans.length === 0 ? (
+            <Empty message="Esta agencia no tiene planes de producción." />
+          ) : (
+            plans.map((plan: ProductionPlan) => {
+              const items = planItems.filter((item: PlanItem) => item.plan_id === plan.id)
+              const planDelivs = deliverables.filter((d: Deliverable) => d.plan_id === plan.id)
+              const approved = planDelivs.filter((d: Deliverable) => d.status === "approved" || d.status === "published").length
+              const overdue = planDelivs.filter(isOverdue).length
+              
+              return (
+                <button
+                  key={plan.id}
+                  onClick={() => onPlanClick(plan.id)}
+                  className="w-full text-left rounded-xl border p-4 transition-colors hover:bg-muted/50 hover:border-primary/30"
+                >
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <div className="font-medium">{plan.name}</div>
+                      <div className="text-xs text-muted-foreground">{plan.period_start} - {plan.period_end} · {plan.period_type}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      {overdue > 0 && <Badge className="bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300">{overdue} atrasados</Badge>}
+                      <Badge variant="outline">{approved}/{planDelivs.length} aprobados</Badge>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {items.map((item: PlanItem) => <Badge key={item.id} variant="secondary" className="text-xs">{item.deliverable_type}: {item.target_quantity}</Badge>)}
+                  </div>
+                </button>
+              )
+            })
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
 
-function DeliverableCard({ deliverable, agencyName, planName, onStatusChange, onEdit, updating, canManage }: any) {
-  return <div className="rounded-xl border bg-card p-3 shadow-sm"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="font-medium leading-tight">{deliverable.title}</div><div className="mt-1 text-xs text-muted-foreground">{agencyName || "Agencia"} · {planName || "Plan"}</div></div>{isOverdue(deliverable) && <Badge className="bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300">Atrasado</Badge>}</div><div className="mt-3 flex flex-wrap gap-1"><Badge variant="secondary" className="text-xs">{deliverable.deliverable_type}</Badge>{deliverable.channel && <Badge variant="outline" className="text-xs">{deliverable.channel}</Badge>}<Badge className={`text-xs ${statusTone(deliverable.status)}`}>{statusLabel(deliverable.status)}</Badge></div>{deliverable.due_date && <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground"><CalendarDays className="h-3 w-3" /> Vence {deliverable.due_date}</div>}{deliverable.external_url && <a href={deliverable.external_url} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs text-primary hover:underline">Ver link externo <ExternalLink className="h-3 w-3" /></a>}{canManage && <div className="mt-3 flex gap-2"><select className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs" value={deliverable.status} disabled={updating} onChange={(event) => onStatusChange(deliverable, event.target.value)}>{FLOW_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select><Button type="button" size="sm" variant="outline" onClick={() => onEdit(deliverable)}><Edit3 className="h-3 w-3" /></Button></div>}</div>
+// Plan Kanban view with drag & drop - uses configurable stages
+interface PlanKanbanViewProps {
+  stages: PlanStage[]
+  deliverables: Deliverable[]
+  onDragEnd: (result: DropResult) => void
+  onEdit: (deliverable: Deliverable) => void
+  onEditStage: (stage: PlanStage) => void
+  onDeleteStage: (stageId: string) => void
+  onCreateStage: () => void
+  onCreateDeliverable: (stageId: string | null) => void
+  updatingId: string | null
+  canManage: boolean
 }
 
-function TableView({ deliverables, agencyById, brandById, planById, onStatusChange, onEdit, updatingId, canManage }: any) {
-  return <Card><CardHeader><CardTitle>Tabla de entregables</CardTitle><CardDescription>Control operativo por agencia, plan, fecha, link y estado.</CardDescription></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-sm"><thead className="border-b text-left text-xs text-muted-foreground"><tr><th className="py-3 pr-4">Entregable</th><th className="py-3 pr-4">Agencia</th><th className="py-3 pr-4">Marca</th><th className="py-3 pr-4">Plan</th><th className="py-3 pr-4">Tipo</th><th className="py-3 pr-4">Prioridad</th><th className="py-3 pr-4">Estado</th><th className="py-3 pr-4">Vence</th><th className="py-3 pr-4">Link</th><th className="py-3 pr-4">Acciones</th></tr></thead><tbody>{deliverables.map((deliverable: Deliverable) => <tr key={deliverable.id} className="border-b last:border-0"><td className="py-3 pr-4 font-medium">{deliverable.title}<div className="text-xs text-muted-foreground line-clamp-1">{deliverable.notes || deliverable.description}</div></td><td className="py-3 pr-4">{agencyById.get(deliverable.agency_id)?.name || "—"}</td><td className="py-3 pr-4">{deliverable.brand_id ? brandById.get(deliverable.brand_id)?.name || "—" : "—"}</td><td className="py-3 pr-4">{planById.get(deliverable.plan_id)?.name || "—"}</td><td className="py-3 pr-4">{deliverable.deliverable_type}</td><td className="py-3 pr-4 capitalize">{deliverable.priority}</td><td className="py-3 pr-4">{canManage ? <select className="h-9 rounded-md border border-input bg-background px-2 text-xs" value={deliverable.status} disabled={updatingId === deliverable.id} onChange={(event) => onStatusChange(deliverable, event.target.value)}>{FLOW_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select> : <Badge className={statusTone(deliverable.status)}>{statusLabel(deliverable.status)}</Badge>}</td><td className="py-3 pr-4"><span className={isOverdue(deliverable) ? "font-medium text-red-600" : ""}>{deliverable.due_date || "—"}</span></td><td className="py-3 pr-4">{deliverable.external_url ? <a href={deliverable.external_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">Abrir <ExternalLink className="h-3 w-3" /></a> : "—"}</td><td className="py-3 pr-4">{canManage ? <Button size="sm" variant="outline" onClick={() => onEdit(deliverable)}><Edit3 className="mr-2 h-3 w-3" />Editar</Button> : "—"}</td></tr>)}</tbody></table></div>{deliverables.length === 0 && <Empty message="No hay entregables con los filtros actuales." />}</CardContent></Card>
+function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, onDeleteStage, onCreateStage, onCreateDeliverable, updatingId, canManage }: PlanKanbanViewProps) {
+  // Group deliverables by stage_id
+  const deliverablesByStage = useMemo(() => {
+    const map = new Map<string | null, Deliverable[]>()
+    map.set(null, []) // Unassigned
+    stages.forEach(s => map.set(s.id, []))
+    deliverables.forEach(d => {
+      const key = d.stage_id
+      const arr = map.get(key) || map.get(null)!
+      arr.push(d)
+    })
+    return map
+  }, [deliverables, stages])
+
+  const unassignedItems = deliverablesByStage.get(null) || []
+  const hasUnassigned = unassignedItems.length > 0
+
+  return (
+    <DragDropContext onDragEnd={onDragEnd}>
+      <div className="flex gap-3 overflow-x-auto pb-4">
+        {/* Show unassigned column FIRST if there are items without stage */}
+        {hasUnassigned && (
+          <Droppable droppableId="unassigned">
+            {(provided: DroppableProvided) => (
+              <div ref={provided.innerRef} {...provided.droppableProps} className="flex-shrink-0 w-64 md:w-72">
+                <Card className="min-h-[280px] bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+                  <CardHeader className="py-3 px-3">
+                    <div className="flex justify-between items-center">
+                      <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4" />
+                        Sin etapa
+                      </CardTitle>
+                      <Badge variant="secondary" className="text-xs bg-amber-100 dark:bg-amber-900/40">{unassignedItems.length}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2 px-3 pb-3">
+                    {unassignedItems.map((deliverable, index) => (
+                      <Draggable key={deliverable.id} draggableId={deliverable.id} index={index} isDragDisabled={!canManage}>
+                        {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+                          <div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            {...dragProvided.dragHandleProps}
+                            className={`rounded-lg border bg-card p-2 shadow-sm cursor-grab text-sm ${snapshot.isDragging ? 'ring-2 ring-primary' : ''}`}
+                          >
+                            <DeliverableCardContent deliverable={deliverable} onEdit={onEdit} updating={updatingId === deliverable.id} canManage={canManage} />
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </Droppable>
+        )}
+
+        {stages.map((stage) => {
+          const items = deliverablesByStage.get(stage.id) || []
+          return (
+            <Droppable key={stage.id} droppableId={stage.id}>
+              {(provided: DroppableProvided) => (
+                <div ref={provided.innerRef} {...provided.droppableProps} className="flex-shrink-0 w-64 md:w-72">
+                  <Card className="min-h-[280px] bg-muted/20">
+                    <CardHeader className="py-3 px-3">
+                      <div className="flex justify-between items-center">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          {stage.color && <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }} />}
+                          <span className="truncate max-w-[120px]">{stage.name}</span>
+                        </CardTitle>
+                        <div className="flex items-center gap-1">
+                          <Badge variant="secondary" className="text-xs">{items.length}</Badge>
+                          {canManage && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><MoreHorizontal className="h-3 w-3" /></Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => onCreateDeliverable(stage.id)}><Plus className="h-4 w-4 mr-2" />Agregar entrega</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onEditStage(stage)}><Edit3 className="h-4 w-4 mr-2" />Editar etapa</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onDeleteStage(stage.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar etapa</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-2 px-3 pb-3">
+                      {items.map((deliverable, index) => (
+                        <Draggable key={deliverable.id} draggableId={deliverable.id} index={index} isDragDisabled={!canManage}>
+                          {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+                            <div
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              {...dragProvided.dragHandleProps}
+                              className={`rounded-lg border bg-card p-2 shadow-sm cursor-grab text-sm transition-shadow ${snapshot.isDragging ? 'ring-2 ring-primary shadow-lg' : 'hover:shadow-md'}`}
+                            >
+                              <DeliverableCardContent deliverable={deliverable} onEdit={onEdit} updating={updatingId === deliverable.id} canManage={canManage} />
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                      {items.length === 0 && (
+                        <div className="rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground">
+                          Arrastra entregas aquí
+                        </div>
+                      )}
+                      {canManage && (
+                        <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-foreground text-xs h-8" size="sm" onClick={() => onCreateDeliverable(stage.id)}>
+                          <Plus className="h-3 w-3 mr-1" />Agregar
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </Droppable>
+          )
+        })}
+
+        {/* Add stage button */}
+        {canManage && (
+          <div className="flex-shrink-0 w-64 md:w-72">
+            <Button variant="outline" className="w-full h-[280px] border-dashed text-xs" onClick={onCreateStage}>
+              <Plus className="h-4 w-4 mr-1" />
+              Agregar etapa
+            </Button>
+          </div>
+        )}
+      </div>
+    </DragDropContext>
+  )
+}
+
+// Deliverable card content (reusable)
+function DeliverableCardContent({ deliverable, onEdit, updating, canManage }: { deliverable: Deliverable; onEdit: (d: Deliverable) => void; updating: boolean; canManage: boolean }) {
+  return (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="font-medium leading-tight text-sm">{deliverable.title}</div>
+          {deliverable.description && <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{deliverable.description}</div>}
+        </div>
+        {canManage && (
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 flex-shrink-0" onClick={(e) => { e.stopPropagation(); onEdit(deliverable) }}>
+            <Edit3 className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1">
+        <Badge variant="secondary" className="text-xs">{deliverable.deliverable_type}</Badge>
+        {deliverable.channel && <Badge variant="outline" className="text-xs">{deliverable.channel}</Badge>}
+        {isOverdue(deliverable) && <Badge className="bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 text-xs">Atrasado</Badge>}
+      </div>
+      {deliverable.due_date && (
+        <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+          <CalendarDays className="h-3 w-3" /> {deliverable.due_date}
+        </div>
+      )}
+    </>
+  )
+}
+
+// Plan table view
+function PlanTableView({ stages, deliverables, brandById, onEdit, updatingId, canManage }: { stages: PlanStage[]; deliverables: Deliverable[]; brandById: any; onEdit: (d: Deliverable) => void; updatingId: string | null; canManage: boolean }) {
+  const stageById = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages])
+  
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Entregas del plan</CardTitle>
+        <CardDescription>Vista de tabla con todos los entregables de este plan.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[800px] text-sm">
+            <thead className="border-b text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="py-3 pr-4">Entregable</th>
+                <th className="py-3 pr-4">Tipo</th>
+                <th className="py-3 pr-4">Canal</th>
+                <th className="py-3 pr-4">Etapa</th>
+                <th className="py-3 pr-4">Prioridad</th>
+                <th className="py-3 pr-4">Vence</th>
+                <th className="py-3 pr-4">Link</th>
+                <th className="py-3 pr-4">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {deliverables.map((d: Deliverable) => {
+                const stage = d.stage_id ? stageById.get(d.stage_id) : null
+                return (
+                  <tr key={d.id} className="border-b last:border-0">
+                    <td className="py-3 pr-4">
+                      <div className="font-medium">{d.title}</div>
+                      {d.notes && <div className="text-xs text-muted-foreground line-clamp-1">{d.notes}</div>}
+                    </td>
+                    <td className="py-3 pr-4">{d.deliverable_type}</td>
+                    <td className="py-3 pr-4">{d.channel || "—"}</td>
+                    <td className="py-3 pr-4">
+                      {stage ? (
+                        <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+                          {stage.color && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: stage.color }} />}
+                          {stage.name}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">Sin etapa</span>
+                      )}
+                    </td>
+                    <td className="py-3 pr-4 capitalize">{d.priority}</td>
+                    <td className="py-3 pr-4">
+                      <span className={isOverdue(d) ? "font-medium text-red-600" : ""}>{d.due_date || "—"}</span>
+                    </td>
+                    <td className="py-3 pr-4">
+                      {d.external_url ? (
+                        <a href={d.external_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      ) : "—"}
+                    </td>
+                    <td className="py-3 pr-4">
+                      {canManage && (
+                        <Button size="sm" variant="outline" onClick={() => onEdit(d)}>
+                          <Edit3 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {deliverables.length === 0 && <Empty message="No hay entregas en este plan." />}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Create deliverable dialog
+function CreateDeliverableDialog({ open, onClose, onCreate, stageId, stages, creating }: { 
+  open: boolean
+  onClose: () => void
+  onCreate: (title: string, stageId: string | null) => void
+  stageId: string
+  stages: PlanStage[]
+  creating: boolean 
+}) {
+  const [title, setTitle] = useState("")
+  const [selectedStageId, setSelectedStageId] = useState(stageId)
+  
+  // Update selected stage when stageId prop changes
+  useEffect(() => { setSelectedStageId(stageId) }, [stageId])
+  
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    onCreate(title, selectedStageId || null)
+    setTitle("")
+  }
+  
+  const stageName = stages.find(s => s.id === selectedStageId)?.name || "Sin etapa"
+  
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Crear entregable</DialogTitle>
+          <DialogDescription>Se creará en la etapa: {stageName}</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Field label="Título">
+            <Input 
+              value={title} 
+              onChange={(e) => setTitle(e.target.value)} 
+              placeholder="Nombre del entregable" 
+              required 
+              autoFocus
+            />
+          </Field>
+          <Field label="Etapa">
+            <select 
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={selectedStageId}
+              onChange={(e) => setSelectedStageId(e.target.value)}
+            >
+              {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </Field>
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" disabled={creating || !title.trim()}>
+              {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Crear
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Stage edit/create dialog
+function StageDialog({ open, onClose, stage, form, setForm, onSave, saving }: {
+  open: boolean
+  onClose: () => void
+  stage: PlanStage | null
+  form: { name: string; color: string }
+  setForm: (form: { name: string; color: string }) => void
+  onSave: () => void
+  saving: boolean
+}) {
+  const colors = ["#94a3b8", "#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#ec4899", "#8b5cf6", "#06b6d4"]
+  
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{stage ? "Editar etapa" : "Nueva etapa"}</DialogTitle>
+          <DialogDescription>{stage ? "Modifica el nombre y color de la etapa." : "Agrega una nueva etapa al kanban."}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <Field label="Nombre">
+            <Input 
+              value={form.name} 
+              onChange={(e) => setForm({ ...form, name: e.target.value })} 
+              placeholder="Nombre de la etapa" 
+              autoFocus
+            />
+          </Field>
+          <Field label="Color">
+            <div className="flex gap-2 flex-wrap">
+              {colors.map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setForm({ ...form, color: c })}
+                  className={`w-8 h-8 rounded-full border-2 transition-transform ${form.color === c ? 'ring-2 ring-offset-2 ring-primary scale-110' : 'border-transparent hover:scale-105'}`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </Field>
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button onClick={onSave} disabled={saving || !form.name.trim()}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {stage ? "Guardar" : "Crear"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 function SetupView(props: any) {
   const { 
-    agencies, agencyMembers, brands, 
+    agencies, brands, 
     agencyForm, setAgencyForm, 
-    agencyMemberForm, setAgencyMemberForm, editingAgencyMember, setEditingAgencyMember,
-    createAgencyMember, updateAgencyMember, deleteAgencyMember, creatingAgencyMember,
-    selectedAgencyForMembers, setSelectedAgencyForMembers, getMembersForAgency,
     brandForm, setBrandForm, 
     planForm, setPlanForm, draftItems, setDraftItems, 
     createAgency, createBrand, createPlan, 
@@ -874,155 +1542,11 @@ function SetupView(props: any) {
   } = props
   const updateDraft = (id: string, changes: Partial<PlanItemDraft>) => setDraftItems((prev: PlanItemDraft[]) => prev.map((item) => item.local_id === id ? { ...item, ...changes } : item))
   const removeDraft = (id: string) => setDraftItems((prev: PlanItemDraft[]) => prev.length === 1 ? prev : prev.filter((item) => item.local_id !== id))
-  
-  const selectedAgencyMembers = selectedAgencyForMembers ? getMembersForAgency(selectedAgencyForMembers) : []
-  const selectedAgencyName = agencies.find((a: Agency) => a.id === selectedAgencyForMembers)?.name || ""
 
-  return <div className="space-y-6">
-    {/* Agency Members Section */}
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Miembros de agencias</CardTitle>
-        <CardDescription>Gestiona los contactos de cada agencia. Cada agencia puede tener múltiples miembros (director, account manager, diseñador, etc).</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Select agency */}
-          <div className="space-y-2">
-            <Label>Seleccionar agencia</Label>
-            <select 
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" 
-              value={selectedAgencyForMembers || ""} 
-              onChange={(e) => {
-                setSelectedAgencyForMembers(e.target.value || null)
-                setAgencyMemberForm({ ...agencyMemberForm, agency_id: e.target.value })
-              }}
-            >
-              <option value="">Seleccionar agencia...</option>
-              {agencies.map((agency: Agency) => (
-                <option key={agency.id} value={agency.id}>
-                  {agency.name} ({(agencyMembers as AgencyMember[]).filter((m: AgencyMember) => m.agency_id === agency.id).length} miembros)
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Add member form */}
-          {selectedAgencyForMembers && (
-            <form onSubmit={createAgencyMember} className="space-y-2">
-              <Label>Agregar miembro a {selectedAgencyName}</Label>
-              <div className="flex gap-2">
-                <Input 
-                  placeholder="Nombre" 
-                  value={agencyMemberForm.name} 
-                  onChange={(e) => setAgencyMemberForm({ ...agencyMemberForm, name: e.target.value })} 
-                  required 
-                />
-                <Input 
-                  type="email" 
-                  placeholder="Email" 
-                  value={agencyMemberForm.email} 
-                  onChange={(e) => setAgencyMemberForm({ ...agencyMemberForm, email: e.target.value })} 
-                  required 
-                />
-              </div>
-              <div className="flex gap-2">
-                <Input 
-                  placeholder="Teléfono" 
-                  value={agencyMemberForm.phone} 
-                  onChange={(e) => setAgencyMemberForm({ ...agencyMemberForm, phone: e.target.value })} 
-                />
-                <Input 
-                  placeholder="Rol (director, account...)" 
-                  value={agencyMemberForm.role} 
-                  onChange={(e) => setAgencyMemberForm({ ...agencyMemberForm, role: e.target.value })} 
-                />
-                <Button type="submit" disabled={creatingAgencyMember}>
-                  {creatingAgencyMember ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                </Button>
-              </div>
-            </form>
-          )}
-        </div>
-
-        {/* Members list */}
-        {selectedAgencyForMembers && (
-          <div className="mt-4">
-            {selectedAgencyMembers.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-                Esta agencia no tiene miembros. Agrega el primer contacto arriba.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {selectedAgencyMembers.map((member: AgencyMember) => (
-                  <div key={member.id} className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
-                    {editingAgencyMember?.id === member.id ? (
-                      <div className="flex flex-1 items-center gap-2">
-                        <Input 
-                          value={editingAgencyMember.name} 
-                          onChange={(e) => setEditingAgencyMember({ ...editingAgencyMember, name: e.target.value })}
-                          className="h-8"
-                        />
-                        <Input 
-                          value={editingAgencyMember.email} 
-                          onChange={(e) => setEditingAgencyMember({ ...editingAgencyMember, email: e.target.value })}
-                          className="h-8"
-                        />
-                        <Input 
-                          value={editingAgencyMember.phone || ""} 
-                          onChange={(e) => setEditingAgencyMember({ ...editingAgencyMember, phone: e.target.value })}
-                          placeholder="Teléfono"
-                          className="h-8"
-                        />
-                        <Input 
-                          value={editingAgencyMember.role || ""} 
-                          onChange={(e) => setEditingAgencyMember({ ...editingAgencyMember, role: e.target.value })}
-                          placeholder="Rol"
-                          className="h-8"
-                        />
-                        <Button size="sm" onClick={() => updateAgencyMember(editingAgencyMember)}>
-                          <Save className="h-4 w-4" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditingAgencyMember(null)}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium">
-                            {member.name.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="font-medium">{member.name}</div>
-                            <div className="text-xs text-muted-foreground">{member.email} {member.role && `· ${member.role}`}</div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => setEditingAgencyMember(member)}>
-                            <Edit3 className="h-4 w-4" />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => deleteAgencyMember(member.id)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-
-    {/* Original grid for agencies, brands, plans */}
-    <div className="grid gap-6 xl:grid-cols-[0.7fr_0.7fr_1.6fr]">
+  return <div className="grid gap-6 xl:grid-cols-[0.7fr_0.7fr_1.6fr]">
     <Card><CardHeader><CardTitle>Nueva agencia</CardTitle><CardDescription>Agrega proveedores o agencias externas.</CardDescription></CardHeader><CardContent><form onSubmit={createAgency} className="space-y-3"><Field label="Nombre"><Input value={agencyForm.name} onChange={(e) => setAgencyForm({ ...agencyForm, name: e.target.value })} placeholder="Agencia / proveedor" required /></Field><Field label="Tipo"><Input value={agencyForm.type} onChange={(e) => setAgencyForm({ ...agencyForm, type: e.target.value })} placeholder="Video, diseño, social media..." /></Field><Field label="Contacto"><Input value={agencyForm.contact_name} onChange={(e) => setAgencyForm({ ...agencyForm, contact_name: e.target.value })} placeholder="Nombre de contacto" /></Field><Field label="Email"><Input type="email" value={agencyForm.contact_email} onChange={(e) => setAgencyForm({ ...agencyForm, contact_email: e.target.value })} placeholder="contacto@agencia.com" /></Field><Field label="Notas"><Textarea value={agencyForm.notes} onChange={(e) => setAgencyForm({ ...agencyForm, notes: e.target.value })} placeholder="Notas internas" /></Field><Button type="submit" className="w-full" disabled={creatingAgency}>{creatingAgency && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Crear agencia</Button></form></CardContent></Card>
     <Card><CardHeader><CardTitle>Nueva marca</CardTitle><CardDescription>Opcional, para organizar por cliente o marca.</CardDescription></CardHeader><CardContent><form onSubmit={createBrand} className="space-y-3"><Field label="Nombre"><Input value={brandForm.name} onChange={(e) => setBrandForm({ ...brandForm, name: e.target.value })} placeholder="SAIA LABS / Cliente" required /></Field><Field label="Descripción"><Textarea value={brandForm.description} onChange={(e) => setBrandForm({ ...brandForm, description: e.target.value })} placeholder="Notas de la marca" /></Field><Button type="submit" className="w-full" disabled={creatingBrand}>{creatingBrand && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Crear marca</Button></form></CardContent></Card>
     <Card><CardHeader><CardTitle>Crear plan flexible</CardTitle><CardDescription>Un plan puede tener cantidades, piezas específicas o una mezcla de ambas.</CardDescription></CardHeader><CardContent><form onSubmit={createPlan} className="space-y-5"><div className="grid gap-3 md:grid-cols-2"><Field label="Nombre del plan" className="md:col-span-2"><Input value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} placeholder="Social media mensual - Mayo" required /></Field><Field label="Agencia"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={planForm.agency_id} onChange={(e) => setPlanForm({ ...planForm, agency_id: e.target.value })} required><option value="">Seleccionar</option>{agencies.map((agency: Agency) => <option key={agency.id} value={agency.id}>{agency.name}</option>)}</select></Field><Field label="Marca"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={planForm.brand_id} onChange={(e) => setPlanForm({ ...planForm, brand_id: e.target.value })}><option value="">Sin marca</option>{brands.map((brand: Brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></Field><Field label="Responsable interno" className="md:col-span-2"><UserSearchField searchTerm={userSearchTerm} setSearchTerm={setUserSearchTerm} searchResults={userSearchResults} searching={searchingUsers} selectedUser={selectedResponsible} onSelectUser={setSelectedResponsible} onClearUser={() => setSelectedResponsible(null)} placeholder="Buscar usuario por email o nombre..." /></Field><Field label="Tipo de periodo"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={planForm.period_type} onChange={(e) => setPlanForm({ ...planForm, period_type: e.target.value })}><option value="monthly">Mensual</option><option value="weekly">Semanal</option><option value="campaign">Campaña</option><option value="custom">Personalizado</option></select></Field><Field label="Fechas"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={planForm.date_strategy} onChange={(e) => setPlanForm({ ...planForm, date_strategy: e.target.value })}><option value="distributed">Distribuir automáticamente</option><option value="same_end">Misma fecha final para todos</option><option value="none">Sin fechas por ahora</option></select></Field><Field label="Inicio"><Input type="date" value={planForm.period_start} onChange={(e) => setPlanForm({ ...planForm, period_start: e.target.value })} required /></Field><Field label="Fin"><Input type="date" value={planForm.period_end} onChange={(e) => setPlanForm({ ...planForm, period_end: e.target.value })} required /></Field><Field label="Notas" className="md:col-span-2"><Textarea value={planForm.notes} onChange={(e) => setPlanForm({ ...planForm, notes: e.target.value })} placeholder="Brief o notas internas del plan" /></Field></div><div className="space-y-3"><div className="flex items-center justify-between"><div><Label>Ítems del plan</Label><p className="text-xs text-muted-foreground">Agrega 30 videos, piezas específicas o un plan mixto.</p></div><Button type="button" size="sm" variant="outline" onClick={() => setDraftItems([...draftItems, newPlanItemDraft()])}><Plus className="mr-2 h-3 w-3" />Agregar ítem</Button></div>{draftItems.map((item: PlanItemDraft, index: number) => <div key={item.local_id} className="rounded-xl border p-3"><div className="mb-3 flex items-center justify-between"><span className="text-sm font-medium">Ítem {index + 1}</span><Button type="button" size="sm" variant="ghost" onClick={() => removeDraft(item.local_id)} disabled={draftItems.length === 1}><Trash2 className="h-3 w-3" /></Button></div><div className="grid gap-3 md:grid-cols-3"><Field label="Tipo"><Input list="deliverable-types" value={item.deliverable_type} onChange={(e) => updateDraft(item.local_id, { deliverable_type: e.target.value })} required /><datalist id="deliverable-types">{DEFAULT_TYPES.map((type) => <option key={type} value={type} />)}</datalist></Field><Field label="Cantidad"><Input type="number" min="1" max="250" value={item.target_quantity} onChange={(e) => updateDraft(item.local_id, { target_quantity: e.target.value })} required /></Field><Field label="Nombres"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={item.naming_mode} onChange={(e) => updateDraft(item.local_id, { naming_mode: e.target.value as PlanItemDraft["naming_mode"] })}><option value="numbered">Nombre base + número</option><option value="same">Mismo nombre para todos</option></select></Field><Field label="Nombre base"><Input value={item.title_base} onChange={(e) => updateDraft(item.local_id, { title_base: e.target.value })} placeholder="Video, Copy LinkedIn, Reporte mensual..." /></Field><Field label="Canal"><Input value={item.channel} onChange={(e) => updateDraft(item.local_id, { channel: e.target.value })} placeholder="Instagram, TikTok, LinkedIn" /></Field><Field label="Formato"><Input value={item.format} onChange={(e) => updateDraft(item.local_id, { format: e.target.value })} placeholder="1080x1920, texto, PDF/link" /></Field><Field label="Notas" className="md:col-span-3"><Textarea value={item.notes} onChange={(e) => updateDraft(item.local_id, { notes: e.target.value })} placeholder="Notas para este tipo de entregable" /></Field></div></div>)}</div><Button type="submit" className="w-full" disabled={creatingPlan || agencies.length === 0}>{creatingPlan && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Crear plan y generar entregables</Button>{agencies.length === 0 && <p className="text-xs text-muted-foreground">Primero crea al menos una agencia.</p>}</form></CardContent></Card>
-    </div>
   </div>
 }
 

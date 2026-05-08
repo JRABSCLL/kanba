@@ -79,6 +79,32 @@ Campos sugeridos:
 - estado: activa, pausada, archivada;
 - notas internas.
 
+### Usuarios unificados (v0.10.0)
+
+Todos los usuarios del sistema están en la tabla `profiles` con login de Supabase Auth.
+
+**Tipos de usuario:**
+
+| user_type | agency_id | Descripción |
+|-----------|-----------|-------------|
+| `internal` | `null` | Usuario interno (tu equipo) |
+| `agency` | UUID de agencia | Usuario de agencia externa |
+
+**Permisos:**
+
+- **Internal admin:** Ve todo, gestiona usuarios, configura planes
+- **Internal member:** Ve sus proyectos asignados, agencias (read)
+- **Agency member:** Ve SOLO entregas de SU agencia, puede crear/editar entregas
+
+**Flujo para agregar usuario de agencia:**
+
+1. Admin va a `/dashboard/admin/users`
+2. Usuario se registra normalmente (queda inactivo)
+3. Admin lo activa y lo asigna a una agencia con el selector
+4. Usuario entra y ve solo las entregas de su agencia
+
+No existe tabla `agency_members` separada. Los miembros de agencia SON profiles con `user_type='agency'`.
+
 ### Marca o cliente
 
 Representa la marca, cliente o unidad de negocio para la cual se produce contenido.

@@ -166,21 +166,21 @@ export function KanbanBoard({
 }: KanbanBoardProps) {
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="flex gap-6 overflow-x-auto pb-4">
+      <div className="flex gap-3 overflow-x-auto pb-4">
         {columns.map((column) => (
           <Droppable key={column.id} droppableId={column.id}>
             {(provided: DroppableProvided, snapshot: DroppableStateSnapshot) => (
               <div
                 ref={provided.innerRef}
                 {...provided.droppableProps}
-                className="flex-shrink-0 w-80"
+                className="flex-shrink-0 w-64 md:w-72"
               >
-                <Card className="bg-muted/20 {`transition-colors ${snapshot.isDraggingOver ? 'bg-muted/50' : ''}`}">
-                  <CardHeader className="pb-3">
+                <Card className={`bg-muted/20 min-h-[280px] transition-colors ${snapshot.isDraggingOver ? 'bg-muted/40' : ''}`}>
+                  <CardHeader className="py-3 px-3">
                     <div className="flex justify-between items-center">
-                      <CardTitle className="text-sm font-medium">{column.name}</CardTitle>
+                      <CardTitle className="text-sm font-medium truncate max-w-[140px]">{column.name}</CardTitle>
                       {!readOnly && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                           <Badge variant="secondary" className="text-xs">{column.tasks.length}</Badge>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -198,7 +198,7 @@ export function KanbanBoard({
                       )}
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-3">
+                  <CardContent className="space-y-2 px-3 pb-3">
                     {column.tasks.map((task, index) => (
                       <TaskCard
                         key={task.id}
@@ -214,8 +214,8 @@ export function KanbanBoard({
                     ))}
                     {provided.placeholder}
                     {!readOnly && (
-                      <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-foreground" size="sm" onClick={() => onAddTask(column.id)}>
-                        <Plus className="h-4 w-4 mr-2" />Add a task
+                      <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-foreground text-xs h-8" size="sm" onClick={() => onAddTask(column.id)}>
+                        <Plus className="h-3 w-3 mr-1" />Add task
                       </Button>
                     )}
                   </CardContent>
