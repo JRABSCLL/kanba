@@ -19,30 +19,47 @@ interface AdminProfile {
   avatar_url: string | null
   is_active: boolean
   role: "member" | "admin"
+  user_type: "internal" | "agency"
+  agency_id: string | null
   created_at: string
+}
+
+interface Agency {
+  id: string
+  name: string
 }
 
 export default function AdminUsersPage() {
   const router = useRouter()
   const { user, loading } = useUser()
   const [profiles, setProfiles] = useState<AdminProfile[]>([])
+  const [agencies, setAgencies] = useState<Agency[]>([])
   const [fetching, setFetching] = useState(true)
   const [acting, setActing] = useState<string | null>(null)
 
   const isAdmin = user?.role === "admin" && user?.is_active === true
 
-  const fetchProfiles = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setFetching(true)
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, email, full_name, avatar_url, is_active, role, created_at")
-      .order("created_at", { ascending: false })
+    const [profilesRes, agenciesRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, email, full_name, avatar_url, is_active, role, user_type, agency_id, created_at")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("agencies")
+        .select("id, name")
+        .order("name", { ascending: true })
+    ])
 
-    if (error) {
+    if (profilesRes.error) {
       toast.error("No se pudieron cargar los usuarios")
-      console.log("[v0] Admin fetch error:", error.message)
     } else {
-      setProfiles((data as AdminProfile[]) || [])
+      setProfiles((profilesRes.data as AdminProfile[]) || [])
+    }
+    
+    if (!agenciesRes.error) {
+      setAgencies((agenciesRes.data as Agency[]) || [])
     }
     setFetching(false)
   }, [])
@@ -57,12 +74,12 @@ export default function AdminUsersPage() {
       router.replace("/dashboard")
       return
     }
-    fetchProfiles()
-  }, [loading, user, isAdmin, router, fetchProfiles])
+    fetchData()
+  }, [loading, user, isAdmin, router, fetchData])
 
   const updateProfile = async (
     id: string,
-    changes: Partial<Pick<AdminProfile, "is_active" | "role">>,
+    changes: Partial<Pick<AdminProfile, "is_active" | "role" | "user_type" | "agency_id">>,
     successMessage: string,
   ) => {
     setActing(id)
@@ -70,10 +87,9 @@ export default function AdminUsersPage() {
 
     if (error) {
       toast.error("No se pudo actualizar el usuario")
-      console.log("[v0] Admin update error:", error.message)
     } else {
       toast.success(successMessage)
-      await fetchProfiles()
+      await fetchData()
     }
     setActing(null)
   }
@@ -86,6 +102,14 @@ export default function AdminUsersPage() {
     updateProfile(p.id, { role: "admin" }, `${p.email} ahora es admin`)
   const demote = (p: AdminProfile) =>
     updateProfile(p.id, { role: "member" }, `${p.email} ya no es admin`)
+  const assignToAgency = (p: AdminProfile, agencyId: string | null) => {
+    if (agencyId) {
+      const agency = agencies.find(a => a.id === agencyId)
+      updateProfile(p.id, { user_type: "agency", agency_id: agencyId }, `${p.email} asignado a ${agency?.name}`)
+    } else {
+      updateProfile(p.id, { user_type: "internal", agency_id: null }, `${p.email} es ahora usuario interno`)
+    }
+  }
 
   if (loading || fetching) {
     return (
@@ -100,6 +124,8 @@ export default function AdminUsersPage() {
   const inactive = profiles.filter((p) => p.is_active === false)
   const active = profiles.filter((p) => p.is_active === true)
   const admins = profiles.filter((p) => p.role === "admin" && p.is_active === true)
+  const agencyUsers = profiles.filter((p) => p.user_type === "agency" && p.is_active === true)
+  const internalUsers = profiles.filter((p) => p.user_type === "internal" && p.is_active === true)
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
@@ -110,10 +136,12 @@ export default function AdminUsersPage() {
         </p>
       </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard icon={<UserCheck className="w-4 h-4" />} label="Activos" value={active.length} tone="ok" />
         <StatCard icon={<UserX className="w-4 h-4" />} label="Inactivos" value={inactive.length} tone="danger" />
         <StatCard icon={<Shield className="w-4 h-4" />} label="Admins" value={admins.length} tone="info" />
+        <StatCard icon={<UserCheck className="w-4 h-4" />} label="Internos" value={internalUsers.length} tone="ok" />
+        <StatCard icon={<UserCheck className="w-4 h-4" />} label="De Agencia" value={agencyUsers.length} tone="warn" />
       </div>
 
       <Card>
@@ -127,6 +155,7 @@ export default function AdminUsersPage() {
               <TabsTrigger value="active">Activos ({active.length})</TabsTrigger>
               <TabsTrigger value="inactive">Inactivos ({inactive.length})</TabsTrigger>
               <TabsTrigger value="admins">Admins ({admins.length})</TabsTrigger>
+              <TabsTrigger value="agency">De Agencia ({agencyUsers.length})</TabsTrigger>
             </TabsList>
 
             <TabsContent value="active" className="space-y-3">
@@ -134,7 +163,7 @@ export default function AdminUsersPage() {
                 <EmptyState message="No hay usuarios activos." />
               ) : (
                 active.map((p) => (
-                  <UserRow key={p.id} p={p} acting={acting === p.id}>
+                  <UserRow key={p.id} p={p} acting={acting === p.id} agencies={agencies} agencyName={agencies.find(a => a.id === p.agency_id)?.name}>
                     {p.id === user?.id ? (
                       <Badge variant="secondary">Tú</Badge>
                     ) : (
@@ -150,6 +179,15 @@ export default function AdminUsersPage() {
                             Hacer admin
                           </Button>
                         )}
+                        <select 
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          value={p.agency_id || ""}
+                          onChange={(e) => assignToAgency(p, e.target.value || null)}
+                          disabled={acting === p.id}
+                        >
+                          <option value="">Interno</option>
+                          {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
                         <Button size="sm" variant="outline" onClick={() => deactivate(p)} disabled={acting === p.id}>
                           <UserX className="w-4 h-4 mr-1" />
                           Desactivar
@@ -166,7 +204,7 @@ export default function AdminUsersPage() {
                 <EmptyState message="No hay usuarios inactivos." />
               ) : (
                 inactive.map((p) => (
-                  <UserRow key={p.id} p={p} acting={acting === p.id}>
+                  <UserRow key={p.id} p={p} acting={acting === p.id} agencies={agencies} agencyName={agencies.find(a => a.id === p.agency_id)?.name}>
                     <Button size="sm" onClick={() => activate(p)} disabled={acting === p.id}>
                       <Check className="w-4 h-4 mr-1" />
                       Activar
@@ -181,7 +219,7 @@ export default function AdminUsersPage() {
                 <EmptyState message="No hay admins." />
               ) : (
                 admins.map((p) => (
-                  <UserRow key={p.id} p={p} acting={acting === p.id}>
+                  <UserRow key={p.id} p={p} acting={acting === p.id} agencies={agencies} agencyName={agencies.find(a => a.id === p.agency_id)?.name}>
                     {p.id === user?.id ? (
                       <Badge variant="secondary">Tú</Badge>
                     ) : (
@@ -190,6 +228,30 @@ export default function AdminUsersPage() {
                         Quitar admin
                       </Button>
                     )}
+                  </UserRow>
+                ))
+              )}
+            </TabsContent>
+
+            <TabsContent value="agency" className="space-y-3">
+              {agencyUsers.length === 0 ? (
+                <EmptyState message="No hay usuarios de agencia." />
+              ) : (
+                agencyUsers.map((p) => (
+                  <UserRow key={p.id} p={p} acting={acting === p.id} agencies={agencies} agencyName={agencies.find(a => a.id === p.agency_id)?.name}>
+                    <select 
+                      className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      value={p.agency_id || ""}
+                      onChange={(e) => assignToAgency(p, e.target.value || null)}
+                      disabled={acting === p.id}
+                    >
+                      <option value="">Interno</option>
+                      {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                    <Button size="sm" variant="outline" onClick={() => deactivate(p)} disabled={acting === p.id}>
+                      <UserX className="w-4 h-4 mr-1" />
+                      Desactivar
+                    </Button>
                   </UserRow>
                 ))
               )}
@@ -236,10 +298,13 @@ function UserRow({
   p,
   acting,
   children,
+  agencyName,
 }: {
   p: AdminProfile
   acting: boolean
   children: React.ReactNode
+  agencies: Agency[]
+  agencyName?: string
 }) {
   const initials = (p.full_name || p.email)
     .split(/[\s@.]+/)
@@ -264,10 +329,15 @@ function UserRow({
                 Admin
               </Badge>
             )}
+            {p.user_type === "agency" && agencyName && (
+              <Badge variant="secondary" className="text-xs">
+                {agencyName}
+              </Badge>
+            )}
           </div>
           <div className="text-xs text-muted-foreground truncate">{p.email}</div>
           <div className="text-xs text-muted-foreground">
-            Registrado el {new Date(p.created_at).toLocaleDateString("es-ES")}
+            {p.user_type === "internal" ? "Interno" : "Agencia"} · Registrado el {new Date(p.created_at).toLocaleDateString("es-ES")}
           </div>
         </div>
       </div>
