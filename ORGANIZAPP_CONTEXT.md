@@ -1,7 +1,7 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-05-07  
-**Versión actual:** v0.8.0 — Arquitectura limpia (sin duplicidades)
+**Versión actual:** v0.9.0 — Miembros de agencias (contactos múltiples por agencia)
 
 ---
 
@@ -11,17 +11,68 @@
 - **Usuarios internos** (con login) → admins + members
 - **Proyectos** → colaboración usando `project_members`
 - **Agencias externas** (sin login) → datos + tracking de entregas
+- **Miembros de agencia** → contactos de cada agencia (director, account manager, etc.)
 
 **Permisos:**
-- Admin ve TODO, puede crear/editar
+- Admin ve TODO, puede crear/editar/gestionar miembros de agencia
 - Member ve solo sus proyectos, read-only en agencias
 
 **Base de datos:** Supabase (PostgreSQL + RLS + Auth)
 
 **Tablas principales:**
-- `profiles` (usuarios)
+- `profiles` (usuarios internos)
 - `projects` + `project_members` (colaboración interna)
-- `agencies` + `production_*` (agencias y entregas)
+- `agencies` + `agency_members` (agencias y sus contactos)
+- `production_*` (planes y entregas)
+
+---
+
+## Cambios v0.9.0 (agency_members)
+
+### Nueva tabla: `agency_members`
+
+**Problema:** Las agencias solo tenían UN contacto (`contact_name`, `contact_email`). En la vida real, cada agencia tiene múltiples personas (director, account manager, diseñador, etc.).
+
+**Solución:** Nueva tabla `agency_members` que modela contactos múltiples por agencia.
+
+**Migración aplicada:**
+```sql
+CREATE TABLE agency_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT,
+  role TEXT,           -- 'director', 'account_manager', 'designer', etc.
+  position TEXT,       -- Job title
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(agency_id, email)
+);
+
+-- RLS
+CREATE POLICY "Admins can manage agency members" ON agency_members FOR ALL USING (is_approved_admin(auth.uid()));
+CREATE POLICY "Users can view agency members" ON agency_members FOR SELECT USING (is_approved_user(auth.uid()));
+
+-- Migración automática de datos existentes
+INSERT INTO agency_members (agency_id, name, email, phone)
+SELECT id, contact_name, contact_email, contact_phone FROM agencies WHERE contact_name IS NOT NULL;
+```
+
+**UI agregada en `/dashboard/agency-production` → Configuración:**
+- Selector de agencia para ver/gestionar sus miembros
+- Formulario para agregar nuevos miembros (nombre, email, teléfono, rol)
+- Lista de miembros con edición inline y eliminación
+- CRUD completo (create, read, update, delete)
+
+**Flujo:**
+1. Admin va a Configuración
+2. Selecciona una agencia del dropdown
+3. Ve los miembros existentes (migrados de `contact_*` o creados nuevos)
+4. Puede agregar, editar o eliminar miembros
+
+**Próximo paso (futuro):** Agregar selector de `agency_member_id` en deliverables para trackear qué persona de la agencia ejecuta cada entrega.
 
 ---
 
@@ -115,14 +166,21 @@ project_members (id, project_id, user_id, role, created_at)
 
 ```
 agencies (id, name, type, contact_name, contact_email, contact_phone, status, created_at, updated_at)
-  └─ Proveedores externos (sin login, solo datos)
-     - Datos de contacto para coordinación
+  └─ Proveedores externos (sin login)
+     - Datos básicos de la agencia
      - status='active'|'inactive'|'on_hold'
+     - contact_* campos legacy (ahora usar agency_members)
+
+agency_members (id, agency_id, name, email, phone, role, position, is_active, created_at, updated_at)
+  └─ Contactos de cada agencia
+     - Cada agencia puede tener múltiples miembros
+     - role = 'director', 'account_manager', 'designer', etc.
+     - RLS: admins pueden CRUD, members pueden ver
 
 production_plans (id, agency_id, name, status, responsible_admin_id, created_at, updated_at)
   └─ Planes de producción por agencia
      - Periódicos: mensual, semanal, campaña
-     - responsible_admin_id = quién supervisa
+     - responsible_admin_id = usuario interno que supervisa
 
 production_plan_items (id, production_plan_id, title, status, created_at, updated_at)
   └─ Items del plan (tipos de entregables, cantidades)
@@ -130,7 +188,8 @@ production_plan_items (id, production_plan_id, title, status, created_at, update
 production_deliverables (id, agency_id, responsible_internal_id, status, ...)
   └─ Entregas individuales
      - status flow: pending → brief_sent → in_production → delivered → in_review → changes_requested → approved → published
-     - RLS: is_approved_user() puede ver (todos los usuarios activos)
+     - responsible_internal_id = usuario interno supervisor
+     - (futuro: agency_member_id = quién de la agencia lo ejecuta)
 
 brands (id, name, type, description, created_at, updated_at)
   └─ Marcas para asignar a entregas

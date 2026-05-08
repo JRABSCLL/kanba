@@ -60,7 +60,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 - `project_members` — User-to-project associations
 
 **Agencias externas (sin login):**
-- `agencies` — Provider data (contact, status)
+- `agencies` — Provider data (name, type, status)
+- `agency_members` — Multiple contacts per agency (director, account manager, designer, etc.)
 - `production_plans` — Production schedules per agency
 - `production_plan_items` — Individual items in plans
 - `production_deliverables` — State-tracked deliverables
@@ -76,8 +77,9 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 1. **Projects** — Collaborate with internal team using `project_members`
 2. **Agency Production** — Track external deliverables by state (no file uploads)
-3. **Admin Console** — Activate users, assign roles, manage permissions
-4. **User Search** — Assign internal supervisors to agency deliverables
+3. **Agency Members** — Manage multiple contacts per agency (director, account manager, designer)
+4. **Admin Console** — Activate users, assign roles, manage permissions
+5. **User Search** — Assign internal supervisors to agency deliverables
 
 See [ORGANIZAPP_CONTEXT.md](ORGANIZAPP_CONTEXT.md) for complete architecture and changelog.
 

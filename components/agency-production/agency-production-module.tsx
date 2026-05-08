@@ -46,6 +46,18 @@ type Agency = {
   created_at: string
 }
 
+type AgencyMember = {
+  id: string
+  agency_id: string
+  name: string
+  email: string
+  phone: string | null
+  role: string | null
+  position: string | null
+  is_active: boolean
+  created_at: string
+}
+
 type Brand = {
   id: string
   name: string
@@ -223,6 +235,7 @@ export function AgencyProductionModule() {
   const [activeView, setActiveView] = useState<"dashboard" | "kanban" | "table" | "setup">("dashboard")
 
   const [agencies, setAgencies] = useState<Agency[]>([])
+  const [agencyMembers, setAgencyMembers] = useState<AgencyMember[]>([])
   const [brands, setBrands] = useState<Brand[]>([])
   const [plans, setPlans] = useState<ProductionPlan[]>([])
   const [planItems, setPlanItems] = useState<PlanItem[]>([])
@@ -235,6 +248,10 @@ export function AgencyProductionModule() {
   const [search, setSearch] = useState("")
 
   const [agencyForm, setAgencyForm] = useState({ name: "", type: "", contact_name: "", contact_email: "", notes: "" })
+  const [agencyMemberForm, setAgencyMemberForm] = useState({ agency_id: "", name: "", email: "", phone: "", role: "", position: "" })
+  const [editingAgencyMember, setEditingAgencyMember] = useState<AgencyMember | null>(null)
+  const [creatingAgencyMember, setCreatingAgencyMember] = useState(false)
+  const [selectedAgencyForMembers, setSelectedAgencyForMembers] = useState<string | null>(null)
   const [brandForm, setBrandForm] = useState({ name: "", description: "" })
   const [planForm, setPlanForm] = useState({
     name: "",
@@ -355,18 +372,20 @@ export function AgencyProductionModule() {
   async function loadData() {
     setRefreshing(true)
     try {
-      const [agenciesRes, brandsRes, plansRes, planItemsRes, deliverablesRes] = await Promise.all([
+      const [agenciesRes, agencyMembersRes, brandsRes, plansRes, planItemsRes, deliverablesRes] = await Promise.all([
         supabase.from("agencies").select("*").order("created_at", { ascending: false }),
+        supabase.from("agency_members").select("*").order("name", { ascending: true }),
         supabase.from("brands").select("*").order("name", { ascending: true }),
         supabase.from("production_plans").select("*").order("created_at", { ascending: false }),
         supabase.from("production_plan_items").select("*").order("created_at", { ascending: true }),
         supabase.from("production_deliverables").select("*").order("created_at", { ascending: false }),
       ])
 
-      const firstError = [agenciesRes.error, brandsRes.error, plansRes.error, planItemsRes.error, deliverablesRes.error].find(Boolean)
+      const firstError = [agenciesRes.error, agencyMembersRes.error, brandsRes.error, plansRes.error, planItemsRes.error, deliverablesRes.error].find(Boolean)
       if (firstError) throw firstError
 
       setAgencies((agenciesRes.data || []) as Agency[])
+      setAgencyMembers((agencyMembersRes.data || []) as AgencyMember[])
       setBrands((brandsRes.data || []) as Brand[])
       setPlans((plansRes.data || []) as ProductionPlan[])
       setPlanItems((planItemsRes.data || []) as PlanItem[])
@@ -402,6 +421,70 @@ export function AgencyProductionModule() {
       setCreatingAgency(false)
     }
   }
+
+  // Agency Members CRUD
+  async function createAgencyMember(event: FormEvent) {
+    event.preventDefault()
+    if (!canManageProduction) return toast.error("Solo admins pueden agregar miembros")
+    if (!agencyMemberForm.agency_id || !agencyMemberForm.name.trim() || !agencyMemberForm.email.trim()) {
+      return toast.error("Nombre y email son requeridos")
+    }
+    setCreatingAgencyMember(true)
+    try {
+      const { error } = await supabase.from("agency_members").insert({
+        agency_id: agencyMemberForm.agency_id,
+        name: agencyMemberForm.name.trim(),
+        email: agencyMemberForm.email.trim().toLowerCase(),
+        phone: agencyMemberForm.phone.trim() || null,
+        role: agencyMemberForm.role.trim() || null,
+        position: agencyMemberForm.position.trim() || null,
+      })
+      if (error) throw error
+      toast.success("Miembro agregado")
+      setAgencyMemberForm({ agency_id: agencyMemberForm.agency_id, name: "", email: "", phone: "", role: "", position: "" })
+      await loadData()
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo agregar el miembro")
+    } finally {
+      setCreatingAgencyMember(false)
+    }
+  }
+
+  async function updateAgencyMember(member: AgencyMember) {
+    if (!canManageProduction) return toast.error("Solo admins pueden editar miembros")
+    try {
+      const { error } = await supabase.from("agency_members").update({
+        name: member.name,
+        email: member.email.toLowerCase(),
+        phone: member.phone,
+        role: member.role,
+        position: member.position,
+        is_active: member.is_active,
+      }).eq("id", member.id)
+      if (error) throw error
+      toast.success("Miembro actualizado")
+      setEditingAgencyMember(null)
+      await loadData()
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo actualizar el miembro")
+    }
+  }
+
+  async function deleteAgencyMember(memberId: string) {
+    if (!canManageProduction) return toast.error("Solo admins pueden eliminar miembros")
+    if (!confirm("Eliminar este miembro de la agencia?")) return
+    try {
+      const { error } = await supabase.from("agency_members").delete().eq("id", memberId)
+      if (error) throw error
+      toast.success("Miembro eliminado")
+      await loadData()
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo eliminar el miembro")
+    }
+  }
+
+  // Get members for a specific agency
+  const getMembersForAgency = (agencyId: string) => agencyMembers.filter(m => m.agency_id === agencyId && m.is_active)
 
   async function createBrand(event: FormEvent) {
     event.preventDefault()
@@ -661,9 +744,21 @@ export function AgencyProductionModule() {
         canManageProduction ? (
           <SetupView
             agencies={agencies}
+            agencyMembers={agencyMembers}
             brands={brands}
             agencyForm={agencyForm}
             setAgencyForm={setAgencyForm}
+            agencyMemberForm={agencyMemberForm}
+            setAgencyMemberForm={setAgencyMemberForm}
+            editingAgencyMember={editingAgencyMember}
+            setEditingAgencyMember={setEditingAgencyMember}
+            createAgencyMember={createAgencyMember}
+            updateAgencyMember={updateAgencyMember}
+            deleteAgencyMember={deleteAgencyMember}
+            creatingAgencyMember={creatingAgencyMember}
+            selectedAgencyForMembers={selectedAgencyForMembers}
+            setSelectedAgencyForMembers={setSelectedAgencyForMembers}
+            getMembersForAgency={getMembersForAgency}
             brandForm={brandForm}
             setBrandForm={setBrandForm}
             planForm={planForm}
@@ -765,14 +860,169 @@ function TableView({ deliverables, agencyById, brandById, planById, onStatusChan
 }
 
 function SetupView(props: any) {
-  const { agencies, brands, agencyForm, setAgencyForm, brandForm, setBrandForm, planForm, setPlanForm, draftItems, setDraftItems, createAgency, createBrand, createPlan, creatingAgency, creatingBrand, creatingPlan, userSearchTerm, setUserSearchTerm, userSearchResults, searchingUsers, selectedResponsible, setSelectedResponsible } = props
+  const { 
+    agencies, agencyMembers, brands, 
+    agencyForm, setAgencyForm, 
+    agencyMemberForm, setAgencyMemberForm, editingAgencyMember, setEditingAgencyMember,
+    createAgencyMember, updateAgencyMember, deleteAgencyMember, creatingAgencyMember,
+    selectedAgencyForMembers, setSelectedAgencyForMembers, getMembersForAgency,
+    brandForm, setBrandForm, 
+    planForm, setPlanForm, draftItems, setDraftItems, 
+    createAgency, createBrand, createPlan, 
+    creatingAgency, creatingBrand, creatingPlan, 
+    userSearchTerm, setUserSearchTerm, userSearchResults, searchingUsers, selectedResponsible, setSelectedResponsible 
+  } = props
   const updateDraft = (id: string, changes: Partial<PlanItemDraft>) => setDraftItems((prev: PlanItemDraft[]) => prev.map((item) => item.local_id === id ? { ...item, ...changes } : item))
   const removeDraft = (id: string) => setDraftItems((prev: PlanItemDraft[]) => prev.length === 1 ? prev : prev.filter((item) => item.local_id !== id))
+  
+  const selectedAgencyMembers = selectedAgencyForMembers ? getMembersForAgency(selectedAgencyForMembers) : []
+  const selectedAgencyName = agencies.find((a: Agency) => a.id === selectedAgencyForMembers)?.name || ""
 
-  return <div className="grid gap-6 xl:grid-cols-[0.7fr_0.7fr_1.6fr]">
+  return <div className="space-y-6">
+    {/* Agency Members Section */}
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Miembros de agencias</CardTitle>
+        <CardDescription>Gestiona los contactos de cada agencia. Cada agencia puede tener múltiples miembros (director, account manager, diseñador, etc).</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Select agency */}
+          <div className="space-y-2">
+            <Label>Seleccionar agencia</Label>
+            <select 
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" 
+              value={selectedAgencyForMembers || ""} 
+              onChange={(e) => {
+                setSelectedAgencyForMembers(e.target.value || null)
+                setAgencyMemberForm({ ...agencyMemberForm, agency_id: e.target.value })
+              }}
+            >
+              <option value="">Seleccionar agencia...</option>
+              {agencies.map((agency: Agency) => (
+                <option key={agency.id} value={agency.id}>
+                  {agency.name} ({(agencyMembers as AgencyMember[]).filter((m: AgencyMember) => m.agency_id === agency.id).length} miembros)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Add member form */}
+          {selectedAgencyForMembers && (
+            <form onSubmit={createAgencyMember} className="space-y-2">
+              <Label>Agregar miembro a {selectedAgencyName}</Label>
+              <div className="flex gap-2">
+                <Input 
+                  placeholder="Nombre" 
+                  value={agencyMemberForm.name} 
+                  onChange={(e) => setAgencyMemberForm({ ...agencyMemberForm, name: e.target.value })} 
+                  required 
+                />
+                <Input 
+                  type="email" 
+                  placeholder="Email" 
+                  value={agencyMemberForm.email} 
+                  onChange={(e) => setAgencyMemberForm({ ...agencyMemberForm, email: e.target.value })} 
+                  required 
+                />
+              </div>
+              <div className="flex gap-2">
+                <Input 
+                  placeholder="Teléfono" 
+                  value={agencyMemberForm.phone} 
+                  onChange={(e) => setAgencyMemberForm({ ...agencyMemberForm, phone: e.target.value })} 
+                />
+                <Input 
+                  placeholder="Rol (director, account...)" 
+                  value={agencyMemberForm.role} 
+                  onChange={(e) => setAgencyMemberForm({ ...agencyMemberForm, role: e.target.value })} 
+                />
+                <Button type="submit" disabled={creatingAgencyMember}>
+                  {creatingAgencyMember ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* Members list */}
+        {selectedAgencyForMembers && (
+          <div className="mt-4">
+            {selectedAgencyMembers.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                Esta agencia no tiene miembros. Agrega el primer contacto arriba.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {selectedAgencyMembers.map((member: AgencyMember) => (
+                  <div key={member.id} className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
+                    {editingAgencyMember?.id === member.id ? (
+                      <div className="flex flex-1 items-center gap-2">
+                        <Input 
+                          value={editingAgencyMember.name} 
+                          onChange={(e) => setEditingAgencyMember({ ...editingAgencyMember, name: e.target.value })}
+                          className="h-8"
+                        />
+                        <Input 
+                          value={editingAgencyMember.email} 
+                          onChange={(e) => setEditingAgencyMember({ ...editingAgencyMember, email: e.target.value })}
+                          className="h-8"
+                        />
+                        <Input 
+                          value={editingAgencyMember.phone || ""} 
+                          onChange={(e) => setEditingAgencyMember({ ...editingAgencyMember, phone: e.target.value })}
+                          placeholder="Teléfono"
+                          className="h-8"
+                        />
+                        <Input 
+                          value={editingAgencyMember.role || ""} 
+                          onChange={(e) => setEditingAgencyMember({ ...editingAgencyMember, role: e.target.value })}
+                          placeholder="Rol"
+                          className="h-8"
+                        />
+                        <Button size="sm" onClick={() => updateAgencyMember(editingAgencyMember)}>
+                          <Save className="h-4 w-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingAgencyMember(null)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium">
+                            {member.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="font-medium">{member.name}</div>
+                            <div className="text-xs text-muted-foreground">{member.email} {member.role && `· ${member.role}`}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => setEditingAgencyMember(member)}>
+                            <Edit3 className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => deleteAgencyMember(member.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+
+    {/* Original grid for agencies, brands, plans */}
+    <div className="grid gap-6 xl:grid-cols-[0.7fr_0.7fr_1.6fr]">
     <Card><CardHeader><CardTitle>Nueva agencia</CardTitle><CardDescription>Agrega proveedores o agencias externas.</CardDescription></CardHeader><CardContent><form onSubmit={createAgency} className="space-y-3"><Field label="Nombre"><Input value={agencyForm.name} onChange={(e) => setAgencyForm({ ...agencyForm, name: e.target.value })} placeholder="Agencia / proveedor" required /></Field><Field label="Tipo"><Input value={agencyForm.type} onChange={(e) => setAgencyForm({ ...agencyForm, type: e.target.value })} placeholder="Video, diseño, social media..." /></Field><Field label="Contacto"><Input value={agencyForm.contact_name} onChange={(e) => setAgencyForm({ ...agencyForm, contact_name: e.target.value })} placeholder="Nombre de contacto" /></Field><Field label="Email"><Input type="email" value={agencyForm.contact_email} onChange={(e) => setAgencyForm({ ...agencyForm, contact_email: e.target.value })} placeholder="contacto@agencia.com" /></Field><Field label="Notas"><Textarea value={agencyForm.notes} onChange={(e) => setAgencyForm({ ...agencyForm, notes: e.target.value })} placeholder="Notas internas" /></Field><Button type="submit" className="w-full" disabled={creatingAgency}>{creatingAgency && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Crear agencia</Button></form></CardContent></Card>
     <Card><CardHeader><CardTitle>Nueva marca</CardTitle><CardDescription>Opcional, para organizar por cliente o marca.</CardDescription></CardHeader><CardContent><form onSubmit={createBrand} className="space-y-3"><Field label="Nombre"><Input value={brandForm.name} onChange={(e) => setBrandForm({ ...brandForm, name: e.target.value })} placeholder="SAIA LABS / Cliente" required /></Field><Field label="Descripción"><Textarea value={brandForm.description} onChange={(e) => setBrandForm({ ...brandForm, description: e.target.value })} placeholder="Notas de la marca" /></Field><Button type="submit" className="w-full" disabled={creatingBrand}>{creatingBrand && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Crear marca</Button></form></CardContent></Card>
     <Card><CardHeader><CardTitle>Crear plan flexible</CardTitle><CardDescription>Un plan puede tener cantidades, piezas específicas o una mezcla de ambas.</CardDescription></CardHeader><CardContent><form onSubmit={createPlan} className="space-y-5"><div className="grid gap-3 md:grid-cols-2"><Field label="Nombre del plan" className="md:col-span-2"><Input value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} placeholder="Social media mensual - Mayo" required /></Field><Field label="Agencia"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={planForm.agency_id} onChange={(e) => setPlanForm({ ...planForm, agency_id: e.target.value })} required><option value="">Seleccionar</option>{agencies.map((agency: Agency) => <option key={agency.id} value={agency.id}>{agency.name}</option>)}</select></Field><Field label="Marca"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={planForm.brand_id} onChange={(e) => setPlanForm({ ...planForm, brand_id: e.target.value })}><option value="">Sin marca</option>{brands.map((brand: Brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></Field><Field label="Responsable interno" className="md:col-span-2"><UserSearchField searchTerm={userSearchTerm} setSearchTerm={setUserSearchTerm} searchResults={userSearchResults} searching={searchingUsers} selectedUser={selectedResponsible} onSelectUser={setSelectedResponsible} onClearUser={() => setSelectedResponsible(null)} placeholder="Buscar usuario por email o nombre..." /></Field><Field label="Tipo de periodo"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={planForm.period_type} onChange={(e) => setPlanForm({ ...planForm, period_type: e.target.value })}><option value="monthly">Mensual</option><option value="weekly">Semanal</option><option value="campaign">Campaña</option><option value="custom">Personalizado</option></select></Field><Field label="Fechas"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={planForm.date_strategy} onChange={(e) => setPlanForm({ ...planForm, date_strategy: e.target.value })}><option value="distributed">Distribuir automáticamente</option><option value="same_end">Misma fecha final para todos</option><option value="none">Sin fechas por ahora</option></select></Field><Field label="Inicio"><Input type="date" value={planForm.period_start} onChange={(e) => setPlanForm({ ...planForm, period_start: e.target.value })} required /></Field><Field label="Fin"><Input type="date" value={planForm.period_end} onChange={(e) => setPlanForm({ ...planForm, period_end: e.target.value })} required /></Field><Field label="Notas" className="md:col-span-2"><Textarea value={planForm.notes} onChange={(e) => setPlanForm({ ...planForm, notes: e.target.value })} placeholder="Brief o notas internas del plan" /></Field></div><div className="space-y-3"><div className="flex items-center justify-between"><div><Label>Ítems del plan</Label><p className="text-xs text-muted-foreground">Agrega 30 videos, piezas específicas o un plan mixto.</p></div><Button type="button" size="sm" variant="outline" onClick={() => setDraftItems([...draftItems, newPlanItemDraft()])}><Plus className="mr-2 h-3 w-3" />Agregar ítem</Button></div>{draftItems.map((item: PlanItemDraft, index: number) => <div key={item.local_id} className="rounded-xl border p-3"><div className="mb-3 flex items-center justify-between"><span className="text-sm font-medium">Ítem {index + 1}</span><Button type="button" size="sm" variant="ghost" onClick={() => removeDraft(item.local_id)} disabled={draftItems.length === 1}><Trash2 className="h-3 w-3" /></Button></div><div className="grid gap-3 md:grid-cols-3"><Field label="Tipo"><Input list="deliverable-types" value={item.deliverable_type} onChange={(e) => updateDraft(item.local_id, { deliverable_type: e.target.value })} required /><datalist id="deliverable-types">{DEFAULT_TYPES.map((type) => <option key={type} value={type} />)}</datalist></Field><Field label="Cantidad"><Input type="number" min="1" max="250" value={item.target_quantity} onChange={(e) => updateDraft(item.local_id, { target_quantity: e.target.value })} required /></Field><Field label="Nombres"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={item.naming_mode} onChange={(e) => updateDraft(item.local_id, { naming_mode: e.target.value as PlanItemDraft["naming_mode"] })}><option value="numbered">Nombre base + número</option><option value="same">Mismo nombre para todos</option></select></Field><Field label="Nombre base"><Input value={item.title_base} onChange={(e) => updateDraft(item.local_id, { title_base: e.target.value })} placeholder="Video, Copy LinkedIn, Reporte mensual..." /></Field><Field label="Canal"><Input value={item.channel} onChange={(e) => updateDraft(item.local_id, { channel: e.target.value })} placeholder="Instagram, TikTok, LinkedIn" /></Field><Field label="Formato"><Input value={item.format} onChange={(e) => updateDraft(item.local_id, { format: e.target.value })} placeholder="1080x1920, texto, PDF/link" /></Field><Field label="Notas" className="md:col-span-3"><Textarea value={item.notes} onChange={(e) => updateDraft(item.local_id, { notes: e.target.value })} placeholder="Notas para este tipo de entregable" /></Field></div></div>)}</div><Button type="submit" className="w-full" disabled={creatingPlan || agencies.length === 0}>{creatingPlan && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Crear plan y generar entregables</Button>{agencies.length === 0 && <p className="text-xs text-muted-foreground">Primero crea al menos una agencia.</p>}</form></CardContent></Card>
+    </div>
   </div>
 }
 

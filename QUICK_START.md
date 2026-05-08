@@ -28,22 +28,27 @@ Accede a `/dashboard/admin/users`
 Ve a `/dashboard/agency-production`
 
 **Crear agencia:**
-1. Click "Nueva Agencia"
-2. Ingresa datos (nombre, contacto, tipo)
-3. Click "Guardar"
+1. Click tab "Configuración"
+2. En "Nueva agencia", ingresa nombre y tipo
+3. Click "Crear agencia"
+
+**Agregar miembros a la agencia:**
+1. En "Configuración" → "Miembros de agencias"
+2. Selecciona la agencia del dropdown
+3. Ingresa nombre, email, teléfono y rol (director, account manager, etc.)
+4. Click "+" para agregar
+5. Puedes editar o eliminar miembros existentes
 
 **Crear plan de producción:**
-1. Click en una agencia
-2. Click "Nuevo Plan"
-3. Selecciona supervisor interno (busca por email/nombre)
-4. Ingresa detalles del plan
-5. Click "Crear"
+1. En "Configuración" → "Crear plan flexible"
+2. Selecciona agencia y supervisor interno
+3. Agrega items del plan (tipo, cantidad, fechas)
+4. Click "Crear plan con entregables"
 
 **Trackear entregas:**
-- Ver estado de cada entrega
-- Cambiar estado: pending → brief_sent → in_production → delivered → in_review → changes_requested → approved → published
-- Asignar brand a entrega
-- Ver responsable interno
+- Ver estado de cada entrega en Dashboard/Kanban/Tabla
+- Cambiar estado: pending → brief_sent → in_production → delivered → in_review → approved → published
+- Ver responsable interno asignado
 
 ---
 
@@ -91,10 +96,11 @@ Admin crea agencia (datos de contacto)
 
 | Tabla | Propósito |
 |-------|-----------|
-| `profiles` | Usuarios (email, nombre, rol) |
+| `profiles` | Usuarios internos (email, nombre, rol) |
 | `projects` | Proyectos internos |
 | `project_members` | Quién trabaja en qué proyecto |
-| `agencies` | Proveedores externos |
+| `agencies` | Proveedores externos (datos básicos) |
+| `agency_members` | Contactos de cada agencia (director, account, etc.) |
 | `production_plans` | Planes de entrega por agencia |
 | `production_deliverables` | Items individuales con estado |
 
@@ -104,16 +110,16 @@ Admin crea agencia (datos de contacto)
 
 | Acción | Admin | Member |
 |--------|-------|--------|
-| Ver todos los usuarios | ✅ | ❌ |
-| Activar/desactivar usuarios | ✅ | ❌ |
-| Crear proyecto | ✅ | ❌ |
-| Ver mis proyectos | ✅ | ✅ |
-| Ver todos los proyectos | ✅ | ❌ |
-| Crear agencia | ✅ | ❌ |
-| Ver agencias | ✅ | ✅ |
-| Editar agencias | ✅ | ❌ |
-| Trackear entregas | ✅ | ✅ |
-| Cambiar estado entregas | ✅ | ❌ |
+| Ver todos los usuarios | Si | No |
+| Activar/desactivar usuarios | Si | No |
+| Crear proyecto | Si | No |
+| Ver mis proyectos | Si | Si |
+| Ver todos los proyectos | Si | No |
+| Crear agencia | Si | No |
+| Ver agencias | Si | Si |
+| Gestionar miembros de agencia | Si | No |
+| Trackear entregas | Si | Si |
+| Cambiar estado entregas | Si | No |
 
 ---
 
