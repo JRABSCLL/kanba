@@ -20,6 +20,8 @@ import {
   Building2,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   ClipboardList,
   Edit3,
   ExternalLink,
@@ -268,9 +270,13 @@ export function AgencyProductionModule() {
   
   // Stage management
   const [stageDialogOpen, setStageDialogOpen] = useState(false)
+  const [stagesManagerOpen, setStagesManagerOpen] = useState(false)
   const [editingStage, setEditingStage] = useState<PlanStage | null>(null)
   const [stageForm, setStageForm] = useState({ name: "", color: "#94a3b8" })
   const [savingStage, setSavingStage] = useState(false)
+  
+  // Quick launch
+  const [quickLaunchOpen, setQuickLaunchOpen] = useState(false)
 
   const [agencyForm, setAgencyForm] = useState({ name: "", type: "", contact_name: "", contact_email: "", notes: "" })
   const [brandForm, setBrandForm] = useState({ name: "", description: "" })
@@ -695,6 +701,92 @@ export function AgencyProductionModule() {
     setStageDialogOpen(true)
   }
 
+  // Quick launch - create plan with default stages
+  async function quickLaunchPlan(agencyId: string, templateId: string | null) {
+    if (!canManageProduction) return
+    setCreatingPlan(true)
+    try {
+      const agency = agencyById.get(agencyId)
+      if (!agency) throw new Error("Agencia no encontrada")
+      
+      const template = templateId ? stageTemplates.find(t => t.id === templateId) : stageTemplates.find(t => t.is_system) || stageTemplates[0]
+      
+      // Create plan
+      const { data: plan, error: planError } = await supabase.from("production_plans").insert({
+        agency_id: agencyId,
+        name: `Plan ${agency.name} - ${new Date().toLocaleDateString('es', { month: 'long', year: 'numeric' })}`,
+        period_type: "monthly",
+        period_start: todayIso(),
+        period_end: monthEndIso(),
+        status: "active",
+        created_by: user?.id || null,
+      }).select().single()
+      
+      if (planError) throw planError
+      
+      // Create stages from template
+      if (template?.stages?.length) {
+        const stageRows = template.stages.map((s, i) => ({
+          plan_id: plan.id,
+          name: s.name,
+          position: i,
+          color: s.color || null,
+        }))
+        const { data: createdStages, error: stagesError } = await supabase
+          .from("production_plan_stages")
+          .insert(stageRows)
+          .select()
+        if (stagesError) throw stagesError
+        setPlanStages(prev => [...prev, ...(createdStages as PlanStage[])])
+      }
+      
+      setPlans(prev => [plan as ProductionPlan, ...prev])
+      setQuickLaunchOpen(false)
+      goToPlan(plan.id)
+      toast.success("Plan creado")
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo crear el plan")
+    } finally {
+      setCreatingPlan(false)
+    }
+  }
+
+  // Reorder stages
+  async function reorderStages(stageId: string, direction: 'up' | 'down') {
+    if (!selectedPlanId || !canManageProduction) return
+    
+    const currentStages = planStages.filter(s => s.plan_id === selectedPlanId).sort((a, b) => a.position - b.position)
+    const index = currentStages.findIndex(s => s.id === stageId)
+    if (index === -1) return
+    if (direction === 'up' && index === 0) return
+    if (direction === 'down' && index === currentStages.length - 1) return
+    
+    const swapIndex = direction === 'up' ? index - 1 : index + 1
+    const currentStage = currentStages[index]
+    const swapStage = currentStages[swapIndex]
+    
+    // Swap positions
+    const newPosition = swapStage.position
+    const swapPosition = currentStage.position
+    
+    // Optimistic update
+    setPlanStages(prev => prev.map(s => {
+      if (s.id === currentStage.id) return { ...s, position: newPosition }
+      if (s.id === swapStage.id) return { ...s, position: swapPosition }
+      return s
+    }))
+    
+    try {
+      await Promise.all([
+        supabase.from("production_plan_stages").update({ position: newPosition }).eq("id", currentStage.id),
+        supabase.from("production_plan_stages").update({ position: swapPosition }).eq("id", swapStage.id),
+      ])
+    } catch (error: any) {
+      await loadData()
+      toast.error("No se pudo reordenar")
+    }
+  }
+
   function startEditDeliverable(deliverable: Deliverable) {
     if (!canManageProduction) return toast.error("Solo admins pueden editar entregables")
     setEditingDeliverable(deliverable)
@@ -886,9 +978,17 @@ export function AgencyProductionModule() {
 
       {/* View tabs - only on dashboard */}
       {activeView === "dashboard" && (
-        <div className="flex flex-wrap gap-2 border-b pb-2">
-          <ViewButton active={true} onClick={() => {}} label="Dashboard" />
-          {canManageProduction && <ViewButton active={false} onClick={() => setActiveView("setup")} label="Configuración" />}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+          <div className="flex gap-2">
+            <ViewButton active={true} onClick={() => {}} label="Dashboard" />
+            {canManageProduction && <ViewButton active={false} onClick={() => setActiveView("setup")} label="Configuración" />}
+          </div>
+          {canManageProduction && agencies.length > 0 && (
+            <Button size="sm" onClick={() => setQuickLaunchOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Quick Launch
+            </Button>
+          )}
         </div>
       )}
 
@@ -901,9 +1001,17 @@ export function AgencyProductionModule() {
 
       {/* Plan view tabs */}
       {activeView === "plan" && (
-        <div className="flex flex-wrap gap-2 border-b pb-2">
-          <ViewButton active={planViewMode === "kanban"} onClick={() => setPlanViewMode("kanban")} label="Kanban" />
-          <ViewButton active={planViewMode === "table"} onClick={() => setPlanViewMode("table")} label="Tabla" />
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+          <div className="flex gap-2">
+            <ViewButton active={planViewMode === "kanban"} onClick={() => setPlanViewMode("kanban")} label="Kanban" />
+            <ViewButton active={planViewMode === "table"} onClick={() => setPlanViewMode("table")} label="Tabla" />
+          </div>
+          {canManageProduction && (
+            <Button variant="outline" size="sm" onClick={() => setStagesManagerOpen(true)}>
+              <Settings2 className="h-4 w-4 mr-2" />
+              Configurar etapas
+            </Button>
+          )}
         </div>
       )}
 
@@ -979,6 +1087,43 @@ export function AgencyProductionModule() {
             onSave={() => editingStage ? updateStage(editingStage.id, stageForm.name, stageForm.color) : createStage(stageForm.name, stageForm.color)}
             saving={savingStage}
           />
+
+          {/* Stages manager dialog */}
+          <StagesManagerDialog
+            open={stagesManagerOpen}
+            onClose={() => setStagesManagerOpen(false)}
+            stages={selectedPlanStages}
+            templates={stageTemplates}
+            onCreateStage={openCreateStageDialog}
+            onEditStage={openEditStageDialog}
+            onDeleteStage={deleteStage}
+            onReorderStage={reorderStages}
+            onApplyTemplate={async (templateId) => {
+              if (!selectedPlanId) return
+              const template = stageTemplates.find(t => t.id === templateId)
+              if (!template?.stages?.length) return
+              if (!confirm("Esto reemplazará todas las etapas actuales. ¿Continuar?")) return
+              try {
+                // Delete existing stages
+                await supabase.from("production_plan_stages").delete().eq("plan_id", selectedPlanId)
+                // Create new from template
+                const stageRows = template.stages.map((s, i) => ({
+                  plan_id: selectedPlanId,
+                  name: s.name,
+                  position: i,
+                  color: s.color || null,
+                }))
+                const { data, error } = await supabase.from("production_plan_stages").insert(stageRows).select()
+                if (error) throw error
+                setPlanStages(prev => [...prev.filter(s => s.plan_id !== selectedPlanId), ...(data as PlanStage[])])
+                // Clear stage_id from deliverables in this plan
+                setDeliverables(prev => prev.map(d => d.plan_id === selectedPlanId ? { ...d, stage_id: null } : d))
+                toast.success("Plantilla aplicada")
+              } catch (e: any) {
+                toast.error(e.message || "Error al aplicar plantilla")
+              }
+            }}
+          />
         </>
       )}
 
@@ -1011,6 +1156,16 @@ export function AgencyProductionModule() {
           />
         ) : <PermissionCard />
       )}
+
+      {/* Quick launch dialog */}
+      <QuickLaunchDialog
+        open={quickLaunchOpen}
+        onClose={() => setQuickLaunchOpen(false)}
+        agencies={agencies}
+        templates={stageTemplates}
+        onLaunch={quickLaunchPlan}
+        launching={creatingPlan}
+      />
     </div>
   )
 }
@@ -1522,6 +1677,141 @@ function StageDialog({ open, onClose, stage, form, setForm, onSave, saving }: {
             <Button onClick={onSave} disabled={saving || !form.name.trim()}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {stage ? "Guardar" : "Crear"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Stages manager dialog - full control over stages
+function StagesManagerDialog({ open, onClose, stages, templates, onCreateStage, onEditStage, onDeleteStage, onReorderStage, onApplyTemplate }: {
+  open: boolean
+  onClose: () => void
+  stages: PlanStage[]
+  templates: StageTemplate[]
+  onCreateStage: () => void
+  onEditStage: (stage: PlanStage) => void
+  onDeleteStage: (stageId: string) => void
+  onReorderStage: (stageId: string, direction: 'up' | 'down') => void
+  onApplyTemplate: (templateId: string) => void
+}) {
+  const sortedStages = [...stages].sort((a, b) => a.position - b.position)
+  
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Configurar etapas</DialogTitle>
+          <DialogDescription>Administra las columnas del kanban para este plan.</DialogDescription>
+        </DialogHeader>
+        
+        {/* Templates */}
+        <div className="space-y-3">
+          <Label>Aplicar plantilla</Label>
+          <div className="flex flex-wrap gap-2">
+            {templates.map(t => (
+              <Button key={t.id} variant="outline" size="sm" onClick={() => onApplyTemplate(t.id)}>
+                {t.name}
+              </Button>
+            ))}
+          </div>
+        </div>
+        
+        {/* Current stages */}
+        <div className="space-y-3 mt-4">
+          <div className="flex items-center justify-between">
+            <Label>Etapas actuales ({sortedStages.length})</Label>
+            <Button size="sm" variant="outline" onClick={onCreateStage}>
+              <Plus className="h-4 w-4 mr-1" />
+              Nueva
+            </Button>
+          </div>
+          
+          {sortedStages.length === 0 ? (
+            <div className="text-sm text-muted-foreground text-center py-4 border rounded-lg border-dashed">
+              No hay etapas. Aplica una plantilla o crea una nueva.
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+              {sortedStages.map((stage, index) => (
+                <div key={stage.id} className="flex items-center gap-2 p-2 border rounded-lg bg-muted/20">
+                  {stage.color && <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />}
+                  <span className="flex-1 text-sm font-medium truncate">{stage.name}</span>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => onReorderStage(stage.id, 'up')} disabled={index === 0}>
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => onReorderStage(stage.id, 'down')} disabled={index === sortedStages.length - 1}>
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => onEditStage(stage)}>
+                      <Edit3 className="h-3 w-3" />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => onDeleteStage(stage.id)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        <div className="flex justify-end mt-4">
+          <Button variant="outline" onClick={onClose}>Cerrar</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Quick launch dialog - create plan fast
+function QuickLaunchDialog({ open, onClose, agencies, templates, onLaunch, launching }: {
+  open: boolean
+  onClose: () => void
+  agencies: Agency[]
+  templates: StageTemplate[]
+  onLaunch: (agencyId: string, templateId: string | null) => void
+  launching: boolean
+}) {
+  const [selectedAgency, setSelectedAgency] = useState("")
+  const [selectedTemplate, setSelectedTemplate] = useState("")
+  
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Quick Launch</DialogTitle>
+          <DialogDescription>Crea un plan rápido con etapas predeterminadas.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <Field label="Agencia">
+            <select 
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={selectedAgency}
+              onChange={(e) => setSelectedAgency(e.target.value)}
+            >
+              <option value="">Seleccionar agencia...</option>
+              {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Plantilla de etapas">
+            <select 
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={selectedTemplate}
+              onChange={(e) => setSelectedTemplate(e.target.value)}
+            >
+              <option value="">Estándar (por defecto)</option>
+              {templates.map(t => <option key={t.id} value={t.id}>{t.name} - {t.stages.length} etapas</option>)}
+            </select>
+          </Field>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button onClick={() => onLaunch(selectedAgency, selectedTemplate || null)} disabled={!selectedAgency || launching}>
+              {launching && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Crear plan
             </Button>
           </div>
         </div>
