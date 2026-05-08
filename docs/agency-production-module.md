@@ -50,9 +50,28 @@ No es necesario subir archivos dentro de OrganizAPP en la primera versión. Cada
 
 El módulo debe tener vista Kanban como forma de operar el flujo, pero también necesita lista/tabla y dashboard.
 
-- Kanban: útil para mover entregables entre estados.
-- Tabla/lista: útil para filtrar por agencia, campaña, fecha, estado, responsable y atraso.
+- Kanban: útil para mover entregables entre etapas con drag & drop.
+- Tabla/lista: útil para filtrar por agencia, campaña, fecha, etapa, responsable y atraso.
 - Dashboard: útil para ver cumplimiento, atrasos y avance por agencia.
+
+**Etapas configurables:** Cada plan tiene sus propias etapas (columnas del kanban). Se crean automáticamente desde plantillas reutilizables o se pueden crear/editar/eliminar manualmente desde el kanban.
+
+## 3. Etapas del flujo (Stages)
+
+Las etapas son las columnas del kanban. Cada plan tiene su propio conjunto de etapas configurables.
+
+**Plantillas de etapas predefinidas:**
+- Producción estándar: Pendiente → En progreso → En revisión → Cambios → Aprobado → Publicado
+- Video: Guión → Pre-producción → Producción → Edición → Revisión → Aprobado
+- Social Media: Pendiente → En diseño → Copy ready → Revisión → Programado → Publicado
+- Diseño: Brief → Boceto → Diseño → Revisión → Ajustes → Aprobado
+
+**Características:**
+- Las etapas se crean automáticamente al crear un plan (desde plantilla Producción estándar)
+- Cada etapa tiene nombre y color personalizable
+- Los planes existentes crean automáticamente etapas la primera vez que se abren
+- Los entregables se mueven entre etapas con drag & drop
+- Mostrar/ocultar columnas según necesidad
 
 ## 3. Conceptos principales
 
@@ -199,30 +218,31 @@ Campos sugeridos:
 - tipo de entregable;
 - canal;
 - formato;
-- estado;
+- estado (stage_id): la columna actual del kanban;
 - prioridad;
 - fecha límite;
 - fecha de entrega;
 - fecha de aprobación;
 - responsable interno;
-- responsable agencia opcional;
 - link externo opcional;
 - notas.
 
-## 4. Estados sugeridos del flujo
+## 4. Etapas del flujo (Stages)
 
-Estados iniciales recomendados:
+Las etapas son configurables por plan. Cada plan puede tener su propio flujo de trabajo.
 
-1. Pendiente
-2. Brief enviado
-3. En producción
-4. Entregado
-5. En revisión
-6. Cambios solicitados
-7. Aprobado
-8. Publicado
-9. Pausado
-10. Cancelado
+**Plantillas de etapas predefinidas:**
+1. **Producción estándar:** Pendiente → En progreso → En revisión → Cambios → Aprobado → Publicado
+2. **Video:** Guión → Pre-producción → Producción → Edición → Revisión → Aprobado
+3. **Social Media:** Pendiente → En diseño → Copy ready → Revisión → Programado → Publicado
+4. **Diseño:** Brief → Boceto → Diseño → Revisión → Ajustes → Aprobado
+
+**Características:**
+- Crear, editar y eliminar etapas desde el kanban
+- Cada etapa tiene color personalizable
+- Los entregables se mueven entre etapas con drag & drop
+- Las etapas se crean automáticamente al crear un plan
+- Los planes existentes crean etapas automáticamente la primera vez que se abren
 
 Estos estados pueden venir por defecto, pero idealmente deben ser configurables en el futuro.
 
