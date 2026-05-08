@@ -4,8 +4,6 @@ import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { UserProvider } from '@/components/user-provider';
-import { Analytics } from "@vercel/analytics/next"
-import Script from 'next/script'
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -60,27 +58,10 @@ export default function RootLayout({
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <UserProvider>
-            <Analytics />
             {children}
             <Toaster />
           </UserProvider>
         </ThemeProvider>
-
-        {/* Analytics scripts — must be outside <head> in Next.js */}
-        <Script
-          strategy="afterInteractive"
-          src="https://plausible.io/js/pa-DjNMEj3oROaXMoY4-HGLf.js"
-        />
-        <Script id="plausible-init" strategy="afterInteractive">{`
-          window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)};
-          window.plausible.init=window.plausible.init||function(i){plausible.o=i||{}};
-          window.plausible.init();
-        `}</Script>
-        <Script
-          strategy="afterInteractive"
-          src="https://getsleek.io/v1.js"
-          data-site="xRx3jLtq81ymAbbu"
-        />
       </body>
     </html>
   );

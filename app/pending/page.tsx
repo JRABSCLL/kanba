@@ -19,10 +19,10 @@ export default function PendingPage() {
     setMounted(true)
   }, [])
 
-  // If approved (or still loading) bounce them back to the dashboard
+  // If active (or still loading) bounce them back to the dashboard
   useEffect(() => {
     if (!mounted) return
-    if (!loading && user?.status === "approved") {
+    if (!loading && user?.is_active === true) {
       router.replace("/dashboard")
     }
     // If no user at all, back to login
@@ -44,7 +44,8 @@ export default function PendingPage() {
     )
   }
 
-  const isRejected = user?.status === "rejected"
+  // If user exists but is_active is explicitly false, they were rejected/deactivated
+  const isRejected = user?.is_active === false
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">

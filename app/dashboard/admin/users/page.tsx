@@ -17,7 +17,7 @@ interface AdminProfile {
   email: string
   full_name: string | null
   avatar_url: string | null
-  status: "pending" | "approved" | "rejected"
+  is_active: boolean
   role: "member" | "admin"
   created_at: string
 }
@@ -29,13 +29,13 @@ export default function AdminUsersPage() {
   const [fetching, setFetching] = useState(true)
   const [acting, setActing] = useState<string | null>(null)
 
-  const isAdmin = user?.role === "admin" && user?.status === "approved"
+  const isAdmin = user?.role === "admin" && user?.is_active === true
 
   const fetchProfiles = useCallback(async () => {
     setFetching(true)
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, email, full_name, avatar_url, status, role, created_at")
+      .select("id, email, full_name, avatar_url, is_active, role, created_at")
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -62,7 +62,7 @@ export default function AdminUsersPage() {
 
   const updateProfile = async (
     id: string,
-    changes: Partial<Pick<AdminProfile, "status" | "role">>,
+    changes: Partial<Pick<AdminProfile, "is_active" | "role">>,
     successMessage: string,
   ) => {
     setActing(id)
@@ -78,14 +78,10 @@ export default function AdminUsersPage() {
     setActing(null)
   }
 
-  const approve = (p: AdminProfile) =>
-    updateProfile(p.id, { status: "approved" }, `${p.email} ha sido aprobado`)
-  const reject = (p: AdminProfile) =>
-    updateProfile(p.id, { status: "rejected" }, `${p.email} ha sido rechazado`)
-  const reapprove = (p: AdminProfile) =>
-    updateProfile(p.id, { status: "approved" }, `${p.email} ha sido reactivado`)
-  const revoke = (p: AdminProfile) =>
-    updateProfile(p.id, { status: "rejected" }, `Acceso revocado a ${p.email}`)
+  const activate = (p: AdminProfile) =>
+    updateProfile(p.id, { is_active: true }, `${p.email} ha sido activado`)
+  const deactivate = (p: AdminProfile) =>
+    updateProfile(p.id, { is_active: false }, `${p.email} ha sido desactivado`)
   const promote = (p: AdminProfile) =>
     updateProfile(p.id, { role: "admin" }, `${p.email} ahora es admin`)
   const demote = (p: AdminProfile) =>
@@ -101,10 +97,9 @@ export default function AdminUsersPage() {
 
   if (!isAdmin) return null
 
-  const pending = profiles.filter((p) => p.status === "pending")
-  const approved = profiles.filter((p) => p.status === "approved")
-  const rejected = profiles.filter((p) => p.status === "rejected")
-  const admins = profiles.filter((p) => p.role === "admin" && p.status === "approved")
+  const inactive = profiles.filter((p) => p.is_active === false)
+  const active = profiles.filter((p) => p.is_active === true)
+  const admins = profiles.filter((p) => p.role === "admin" && p.is_active === true)
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
@@ -115,10 +110,9 @@ export default function AdminUsersPage() {
         </p>
       </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard icon={<Clock className="w-4 h-4" />} label="Pendientes" value={pending.length} tone="warn" />
-        <StatCard icon={<UserCheck className="w-4 h-4" />} label="Aprobados" value={approved.length} tone="ok" />
-        <StatCard icon={<UserX className="w-4 h-4" />} label="Rechazados" value={rejected.length} tone="danger" />
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <StatCard icon={<UserCheck className="w-4 h-4" />} label="Activos" value={active.length} tone="ok" />
+        <StatCard icon={<UserX className="w-4 h-4" />} label="Inactivos" value={inactive.length} tone="danger" />
         <StatCard icon={<Shield className="w-4 h-4" />} label="Admins" value={admins.length} tone="info" />
       </div>
 
@@ -128,38 +122,18 @@ export default function AdminUsersPage() {
           <CardDescription>Filtra por estado y gestiona permisos.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="pending" className="w-full">
+          <Tabs defaultValue="active" className="w-full">
             <TabsList className="mb-4 flex flex-wrap h-auto">
-              <TabsTrigger value="pending">Pendientes ({pending.length})</TabsTrigger>
-              <TabsTrigger value="approved">Aprobados ({approved.length})</TabsTrigger>
-              <TabsTrigger value="rejected">Rechazados ({rejected.length})</TabsTrigger>
+              <TabsTrigger value="active">Activos ({active.length})</TabsTrigger>
+              <TabsTrigger value="inactive">Inactivos ({inactive.length})</TabsTrigger>
               <TabsTrigger value="admins">Admins ({admins.length})</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="pending" className="space-y-3">
-              {pending.length === 0 ? (
-                <EmptyState message="No hay usuarios pendientes de aprobación." />
+            <TabsContent value="active" className="space-y-3">
+              {active.length === 0 ? (
+                <EmptyState message="No hay usuarios activos." />
               ) : (
-                pending.map((p) => (
-                  <UserRow key={p.id} p={p} acting={acting === p.id}>
-                    <Button size="sm" onClick={() => approve(p)} disabled={acting === p.id}>
-                      <Check className="w-4 h-4 mr-1" />
-                      Aprobar
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => reject(p)} disabled={acting === p.id}>
-                      <X className="w-4 h-4 mr-1" />
-                      Rechazar
-                    </Button>
-                  </UserRow>
-                ))
-              )}
-            </TabsContent>
-
-            <TabsContent value="approved" className="space-y-3">
-              {approved.length === 0 ? (
-                <EmptyState message="No hay usuarios aprobados." />
-              ) : (
-                approved.map((p) => (
+                active.map((p) => (
                   <UserRow key={p.id} p={p} acting={acting === p.id}>
                     {p.id === user?.id ? (
                       <Badge variant="secondary">Tú</Badge>
@@ -176,9 +150,9 @@ export default function AdminUsersPage() {
                             Hacer admin
                           </Button>
                         )}
-                        <Button size="sm" variant="outline" onClick={() => revoke(p)} disabled={acting === p.id}>
+                        <Button size="sm" variant="outline" onClick={() => deactivate(p)} disabled={acting === p.id}>
                           <UserX className="w-4 h-4 mr-1" />
-                          Revocar
+                          Desactivar
                         </Button>
                       </>
                     )}
@@ -187,15 +161,15 @@ export default function AdminUsersPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="rejected" className="space-y-3">
-              {rejected.length === 0 ? (
-                <EmptyState message="No hay usuarios rechazados." />
+            <TabsContent value="inactive" className="space-y-3">
+              {inactive.length === 0 ? (
+                <EmptyState message="No hay usuarios inactivos." />
               ) : (
-                rejected.map((p) => (
+                inactive.map((p) => (
                   <UserRow key={p.id} p={p} acting={acting === p.id}>
-                    <Button size="sm" variant="outline" onClick={() => reapprove(p)} disabled={acting === p.id}>
+                    <Button size="sm" onClick={() => activate(p)} disabled={acting === p.id}>
                       <Check className="w-4 h-4 mr-1" />
-                      Reactivar
+                      Activar
                     </Button>
                   </UserRow>
                 ))

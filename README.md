@@ -1,162 +1,88 @@
+# OrganizAPP
 
-<div align="right">
-  <details>
-    <summary >🌐 Language</summary>
-    <div>
-      <div align="center">
-        <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=en">English</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=zh-CN">简体中文</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=zh-TW">繁體中文</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=ja">日本語</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=ko">한국어</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=hi">हिन्दी</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=th">ไทย</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=fr">Français</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=de">Deutsch</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=es">Español</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=it">Itapano</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=ru">Русский</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=pt">Português</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=nl">Nederlands</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=pl">Polski</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=ar">العربية</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=fa">فارسی</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=tr">Türkçe</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=vi">Tiếng Việt</a>
-        | <a href="https://openaitx.github.io/view.html?user=Uaghazade1&project=kanba&lang=id">Bahasa Indonesia</a>
-      </div>
-    </div>
-  </details>
-</div>
+Internal project management and production control system for managing your organization's projects and external agency work.
 
-<div align="center">
-  <br />
-<br />
-<a href="https://kanba.co">
-  <img alt="Kanba" src="https://www.kanba.co/dark-hero.png" style=" width: 800px " />
-</a>
-    <br />
-<br />
-</div>
+**Tech Stack:** Next.js 13, React 18, Supabase, TypeScript, Tailwind CSS, shadcn/ui
 
-<div align="center">
-  <br />
-<br />
-<a href="https://vercel.com/oss">
-  <img alt="Vercel OSS Program" src="https://vercel.com/oss/program-badge.svg" />
-</a>
-    <br />
-<br />
-</div>
-# Open-source, lightweight Trello alternative designed for makers and indie hackers.
+## Features
 
-Focus on simplicity, speed, and scalability.
-Built with modern stack: Tailwind CSS, shadcn/ui, Supabase, Stripe integration.
-Supports unlimited projects, team collaboration, dark/light mode, and seamless user experience.
-Perfect for solo devs and small teams who want full control without unnecessary complexity.
+- **Projects Management** — Internal projects with team collaboration via `project_members`
+- **Agency Production Control** — Track deliverables from external agencies without file uploads (state-based tracking only)
+- **User Management** — Admin controls for activation, roles, and permissions (`is_active` + `role`)
+- **Real-time Sync** — Supabase row-level security (RLS) ensures members see only their projects
+- **Dark/Light Mode** — Full theme support
 
-## 🌟 If you find this project useful, consider giving it a star! It helps others discover it too.
+## Getting Started
 
-# Deployment Guide
+### Prerequisites
 
-## Overview
-This application now uses local Next.js API routes instead of Supabase Edge Functions for Stripe integration. This makes deployment simpler and allows you to use standard .env files for configuration.
+- Node.js 18+
+- Supabase account (for database and auth)
 
-## Environment Variables Setup
+### Installation
 
-### 1. Create .env.local file
-Copy `.env.example` to `.env.local` and fill in your actual values:
-
+1. **Clone the repository:**
 ```bash
-cp .env.example .env.local
+git clone <your-repo-url>
+cd organizapp
 ```
 
-### 2. Required Environment Variables
-
-#### Supabase Configuration
-- `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Your Supabase anonymous key
-- `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key (server-side only)
-
-#### Stripe Configuration (optional)
-- `STRIPE_SECRET_KEY` - Your Stripe secret key (server-side only)
-- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` - Your Stripe publishable key
-- `STRIPE_WEBHOOK_SECRET` - Your Stripe webhook secret
-
-#### Site Configuration
-- `NEXT_PUBLIC_SITE_URL` - Your site URL (for production)
-- `NEXTAUTH_URL` - Your site URL (same as above)
-- `NEXTAUTH_SECRET` - A random secret for NextAuth
-
-## Local Development
-
-1. Install dependencies:
+2. **Install dependencies:**
 ```bash
 npm install
 ```
 
-2. Set up your environment variables in `.env.local`
+3. **Environment Setup:**
+Copy `.env.example` to `.env.local` and fill in your values:
+```bash
+cp .env.example .env.local
+```
 
-3. Run the development server:
+Required variables:
+- `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Your Supabase anonymous key
+- `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key (for server-side)
+
+4. **Run Development Server:**
 ```bash
 npm run dev
 ```
 
-4. Test Stripe webhooks locally using Stripe CLI:
-```bash
-stripe listen --forward-to localhost:3000/api/stripe/webhook
-```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Production Deployment
+## Architecture
 
+### Database Structure (Supabase)
 
-### Vercel Deployment
+**Usuarios internos:**
+- `profiles` — Users (is_active, role)
+- `projects` — Internal projects
+- `project_members` — User-to-project associations
 
-1. **Deploy to Vercel:**
-```bash
-npx vercel
-```
+**Agencias externas (sin login):**
+- `agencies` — Provider data (name, type, status)
+- `agency_members` — Multiple contacts per agency (director, account manager, designer, etc.)
+- `production_plans` — Production schedules per agency
+- `production_plan_items` — Individual items in plans
+- `production_deliverables` — State-tracked deliverables
+- `brands` — Brands to assign to deliverables
 
-2. **Environment Variables:**
-   Add all environment variables through Vercel dashboard or CLI
+### Access Control
 
-3. **Stripe Webhook Setup:**
-   - Point webhook to: `https://your-domain.vercel.app/api/stripe/webhook`
+- **Admins** (`is_active=true && role='admin'`) — Access all modules, manage users and agencias
+- **Members** (`is_active=true && role='member'`) — See only projects they're assigned to, read-only access to agencies
+- **Inactive** (`is_active=false`) — Blocked from dashboard, redirected to `/pending`
 
-## API Endpoints
+### Key Features
 
-The application now uses these local API routes:
+1. **Projects** — Collaborate with internal team using `project_members`
+2. **Agency Production** — Track external deliverables by state (no file uploads)
+3. **Agency Members** — Manage multiple contacts per agency (director, account manager, designer)
+4. **Admin Console** — Activate users, assign roles, manage permissions
+5. **User Search** — Assign internal supervisors to agency deliverables
 
-- `POST /api/stripe/checkout` - Creates Stripe checkout sessions
-- `POST /api/stripe/webhook` - Handles Stripe webhook events
+See [ORGANIZAPP_CONTEXT.md](ORGANIZAPP_CONTEXT.md) for complete architecture and changelog.
 
-## Benefits of Local API Routes
+## License
 
-1. **Simpler Deployment** - No need to deploy separate edge functions
-2. **Environment Variables** - Standard .env file support
-3. **Better Debugging** - Easier to debug locally
-4. **Framework Integration** - Better integration with Next.js
-5. **No Vendor Lock-in** - Can deploy to any platform that supports Next.js
-
-## Troubleshooting
-
-1. **Webhook Issues:**
-   - Ensure `STRIPE_WEBHOOK_SECRET` matches your Stripe webhook endpoint
-   - Check webhook logs in Stripe dashboard
-   - Verify webhook URL is correct
-
-2. **Environment Variables:**
-   - Ensure all required variables are set
-   - Check for typos in variable names
-   - Verify Supabase service role key has proper permissions
-
-3. **CORS Issues:**
-   - API routes include proper CORS headers
-   - Ensure your domain is whitelisted if needed
-
-## Security Notes
-
-- Never expose `STRIPE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` to the client
-- Use `NEXT_PUBLIC_` prefix only for client-side variables
-- Regularly rotate your webhook secrets
-- Monitor webhook delivery in Stripe dashboard
+Private - Internal use only

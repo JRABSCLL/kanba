@@ -41,10 +41,10 @@ export default function DashboardLayout({
     }
   }, [mounted, loading, user, router])
 
-  // APPROVAL GATE: send pending / rejected users to /pending
+  // APPROVAL GATE: send inactive users to /pending
   useEffect(() => {
     if (!mounted || loading || !user) return
-    if (user.status && user.status !== "approved") {
+    if (user.is_active === false) {
       router.replace("/pending")
     }
   }, [mounted, loading, user, router])
@@ -94,8 +94,8 @@ export default function DashboardLayout({
     )
   }
 
-  // Usuario pendiente/rechazado → el useEffect de arriba lo manda a /pending.
-  if (user.status && user.status !== "approved") {
+  // Usuario inactivo → el useEffect de arriba lo manda a /pending.
+  if (user.is_active === false) {
     return (
       <div className="flex items-center justify-center min-h-screen w-full">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
