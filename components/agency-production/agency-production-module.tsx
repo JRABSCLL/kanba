@@ -788,12 +788,38 @@ export function AgencyProductionModule() {
     setSelectedPlanId(null)
     setActiveView("agency")
   }
-  const goToPlan = (planId: string) => {
+  const goToPlan = async (planId: string) => {
     const plan = planById.get(planId)
     if (plan) {
       setSelectedAgencyId(plan.agency_id)
       setSelectedPlanId(planId)
       setActiveView("plan")
+      
+      // Auto-create stages if plan doesn't have any
+      const existingStages = planStages.filter(s => s.plan_id === planId)
+      if (existingStages.length === 0 && canManageProduction) {
+        const defaultTemplate = stageTemplates.find(t => t.is_system) || stageTemplates[0]
+        if (defaultTemplate?.stages?.length) {
+          try {
+            const stageRows = defaultTemplate.stages.map((s, i) => ({
+              plan_id: planId,
+              name: s.name,
+              position: i,
+              color: s.color || null,
+            }))
+            const { data: createdStages, error } = await supabase
+              .from("production_plan_stages")
+              .insert(stageRows)
+              .select()
+            if (!error && createdStages) {
+              setPlanStages(prev => [...prev, ...(createdStages as PlanStage[])])
+              toast.success("Etapas creadas automáticamente")
+            }
+          } catch (e) {
+            console.error("Error creating default stages:", e)
+          }
+        }
+      }
     }
   }
   const goBack = () => {
@@ -1161,23 +1187,64 @@ function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, 
     return map
   }, [deliverables, stages])
 
+  const unassignedItems = deliverablesByStage.get(null) || []
+  const hasUnassigned = unassignedItems.length > 0
+
   return (
     <DragDropContext onDragEnd={onDragEnd}>
-      <div className="flex gap-6 overflow-x-auto pb-4">
+      <div className="flex gap-3 overflow-x-auto pb-4">
+        {/* Show unassigned column FIRST if there are items without stage */}
+        {hasUnassigned && (
+          <Droppable droppableId="unassigned">
+            {(provided: DroppableProvided) => (
+              <div ref={provided.innerRef} {...provided.droppableProps} className="flex-shrink-0 w-64 md:w-72">
+                <Card className="min-h-[280px] bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+                  <CardHeader className="py-3 px-3">
+                    <div className="flex justify-between items-center">
+                      <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4" />
+                        Sin etapa
+                      </CardTitle>
+                      <Badge variant="secondary" className="text-xs bg-amber-100 dark:bg-amber-900/40">{unassignedItems.length}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2 px-3 pb-3">
+                    {unassignedItems.map((deliverable, index) => (
+                      <Draggable key={deliverable.id} draggableId={deliverable.id} index={index} isDragDisabled={!canManage}>
+                        {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+                          <div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            {...dragProvided.dragHandleProps}
+                            className={`rounded-lg border bg-card p-2 shadow-sm cursor-grab text-sm ${snapshot.isDragging ? 'ring-2 ring-primary' : ''}`}
+                          >
+                            <DeliverableCardContent deliverable={deliverable} onEdit={onEdit} updating={updatingId === deliverable.id} canManage={canManage} />
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </Droppable>
+        )}
+
         {stages.map((stage) => {
           const items = deliverablesByStage.get(stage.id) || []
           return (
             <Droppable key={stage.id} droppableId={stage.id}>
               {(provided: DroppableProvided) => (
-                <div ref={provided.innerRef} {...provided.droppableProps} className="flex-shrink-0 w-80">
-                  <Card className="min-h-[320px] bg-muted/20">
-                    <CardHeader className="pb-3">
+                <div ref={provided.innerRef} {...provided.droppableProps} className="flex-shrink-0 w-64 md:w-72">
+                  <Card className="min-h-[280px] bg-muted/20">
+                    <CardHeader className="py-3 px-3">
                       <div className="flex justify-between items-center">
                         <CardTitle className="text-sm font-medium flex items-center gap-2">
-                          {stage.color && <span className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />}
-                          {stage.name}
+                          {stage.color && <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }} />}
+                          <span className="truncate max-w-[120px]">{stage.name}</span>
                         </CardTitle>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                           <Badge variant="secondary" className="text-xs">{items.length}</Badge>
                           {canManage && (
                             <DropdownMenu>
@@ -1194,7 +1261,7 @@ function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, 
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-2 px-3 pb-3">
                       {items.map((deliverable, index) => (
                         <Draggable key={deliverable.id} draggableId={deliverable.id} index={index} isDragDisabled={!canManage}>
                           {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
@@ -1202,7 +1269,7 @@ function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, 
                               ref={dragProvided.innerRef}
                               {...dragProvided.draggableProps}
                               {...dragProvided.dragHandleProps}
-                              className={`rounded-xl border bg-card p-3 shadow-sm cursor-grab transition-shadow ${snapshot.isDragging ? 'ring-2 ring-primary shadow-lg' : 'hover:shadow-md'}`}
+                              className={`rounded-lg border bg-card p-2 shadow-sm cursor-grab text-sm transition-shadow ${snapshot.isDragging ? 'ring-2 ring-primary shadow-lg' : 'hover:shadow-md'}`}
                             >
                               <DeliverableCardContent deliverable={deliverable} onEdit={onEdit} updating={updatingId === deliverable.id} canManage={canManage} />
                             </div>
@@ -1211,13 +1278,13 @@ function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, 
                       ))}
                       {provided.placeholder}
                       {items.length === 0 && (
-                        <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
+                        <div className="rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground">
                           Arrastra entregas aquí
                         </div>
                       )}
                       {canManage && (
-                        <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-foreground" size="sm" onClick={() => onCreateDeliverable(stage.id)}>
-                          <Plus className="h-4 w-4 mr-2" />Agregar entrega
+                        <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-foreground text-xs h-8" size="sm" onClick={() => onCreateDeliverable(stage.id)}>
+                          <Plus className="h-3 w-3 mr-1" />Agregar
                         </Button>
                       )}
                     </CardContent>
@@ -1227,44 +1294,12 @@ function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, 
             </Droppable>
           )
         })}
-        
-        {/* Unassigned column if there are deliverables without stage */}
-        {(deliverablesByStage.get(null)?.length || 0) > 0 && (
-          <Droppable droppableId="unassigned">
-            {(provided: DroppableProvided) => (
-              <div ref={provided.innerRef} {...provided.droppableProps} className="flex-shrink-0 w-80">
-                <Card className="min-h-[320px] bg-muted/30 border-dashed">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Sin etapa</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {(deliverablesByStage.get(null) || []).map((deliverable, index) => (
-                      <Draggable key={deliverable.id} draggableId={deliverable.id} index={index} isDragDisabled={!canManage}>
-                        {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
-                          <div
-                            ref={dragProvided.innerRef}
-                            {...dragProvided.draggableProps}
-                            {...dragProvided.dragHandleProps}
-                            className={`rounded-xl border bg-card p-3 shadow-sm cursor-grab ${snapshot.isDragging ? 'ring-2 ring-primary' : ''}`}
-                          >
-                            <DeliverableCardContent deliverable={deliverable} onEdit={onEdit} updating={updatingId === deliverable.id} canManage={canManage} />
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </Droppable>
-        )}
 
         {/* Add stage button */}
         {canManage && (
-          <div className="flex-shrink-0 w-80">
-            <Button variant="outline" className="w-full h-[320px] border-dashed" onClick={onCreateStage}>
-              <Plus className="h-5 w-5 mr-2" />
+          <div className="flex-shrink-0 w-64 md:w-72">
+            <Button variant="outline" className="w-full h-[280px] border-dashed text-xs" onClick={onCreateStage}>
+              <Plus className="h-4 w-4 mr-1" />
               Agregar etapa
             </Button>
           </div>
