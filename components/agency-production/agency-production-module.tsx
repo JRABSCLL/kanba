@@ -1,7 +1,9 @@
 "use client"
 
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react"
+import { FormEvent, ReactNode, useEffect, useMemo, useState, useCallback } from "react"
 import Link from "next/link"
+import dynamic from "next/dynamic"
+import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DroppableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd"
 import { supabase } from "@/lib/supabase"
 import { useUser } from "@/components/user-provider"
 import { Button } from "@/components/ui/button"
@@ -10,6 +12,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
 import {
   AlertCircle,
@@ -19,11 +23,15 @@ import {
   ClipboardList,
   Edit3,
   ExternalLink,
+  GripVertical,
   Loader2,
+  MoreHorizontal,
+  Palette,
   Plus,
   RefreshCw,
   Save,
   Search,
+  Settings2,
   ShieldAlert,
   Target,
   Trash2,
@@ -87,6 +95,7 @@ type Deliverable = {
   channel: string | null
   format: string | null
   status: string
+  stage_id: string | null
   priority: string
   due_date: string | null
   delivered_at: string | null
@@ -96,6 +105,25 @@ type Deliverable = {
   external_url: string | null
   notes: string | null
   position: number | null
+  created_at: string
+}
+
+type PlanStage = {
+  id: string
+  plan_id: string
+  name: string
+  position: number
+  color: string | null
+  created_at: string
+}
+
+type StageTemplate = {
+  id: string
+  name: string
+  description: string | null
+  stages: { name: string; position: number; color: string }[]
+  is_system: boolean
+  created_by: string | null
   created_at: string
 }
 
@@ -235,6 +263,14 @@ export function AgencyProductionModule() {
   const [plans, setPlans] = useState<ProductionPlan[]>([])
   const [planItems, setPlanItems] = useState<PlanItem[]>([])
   const [deliverables, setDeliverables] = useState<Deliverable[]>([])
+  const [planStages, setPlanStages] = useState<PlanStage[]>([])
+  const [stageTemplates, setStageTemplates] = useState<StageTemplate[]>([])
+  
+  // Stage management
+  const [stageDialogOpen, setStageDialogOpen] = useState(false)
+  const [editingStage, setEditingStage] = useState<PlanStage | null>(null)
+  const [stageForm, setStageForm] = useState({ name: "", color: "#94a3b8" })
+  const [savingStage, setSavingStage] = useState(false)
 
   const [agencyForm, setAgencyForm] = useState({ name: "", type: "", contact_name: "", contact_email: "", notes: "" })
   const [brandForm, setBrandForm] = useState({ name: "", description: "" })
@@ -273,6 +309,7 @@ export function AgencyProductionModule() {
   const agencyPlans = useMemo(() => selectedAgencyId ? plans.filter(p => p.agency_id === selectedAgencyId) : [], [plans, selectedAgencyId])
   const planDeliverables = useMemo(() => selectedPlanId ? deliverables.filter(d => d.plan_id === selectedPlanId) : [], [deliverables, selectedPlanId])
   const agencyDeliverables = useMemo(() => selectedAgencyId ? deliverables.filter(d => d.agency_id === selectedAgencyId) : [], [deliverables, selectedAgencyId])
+  const selectedPlanStages = useMemo(() => selectedPlanId ? planStages.filter(s => s.plan_id === selectedPlanId).sort((a, b) => a.position - b.position) : [], [planStages, selectedPlanId])
 
   const stats = useMemo(() => {
     const total = deliverables.length
@@ -344,15 +381,17 @@ export function AgencyProductionModule() {
   async function loadData() {
     setRefreshing(true)
     try {
-      const [agenciesRes, brandsRes, plansRes, planItemsRes, deliverablesRes] = await Promise.all([
+      const [agenciesRes, brandsRes, plansRes, planItemsRes, deliverablesRes, stagesRes, templatesRes] = await Promise.all([
         supabase.from("agencies").select("*").order("created_at", { ascending: false }),
         supabase.from("brands").select("*").order("name", { ascending: true }),
         supabase.from("production_plans").select("*").order("created_at", { ascending: false }),
         supabase.from("production_plan_items").select("*").order("created_at", { ascending: true }),
         supabase.from("production_deliverables").select("*").order("created_at", { ascending: false }),
+        supabase.from("production_plan_stages").select("*").order("position", { ascending: true }),
+        supabase.from("production_stage_templates").select("*").order("is_system", { ascending: false }),
       ])
 
-      const firstError = [agenciesRes.error, brandsRes.error, plansRes.error, planItemsRes.error, deliverablesRes.error].find(Boolean)
+      const firstError = [agenciesRes.error, brandsRes.error, plansRes.error, planItemsRes.error, deliverablesRes.error, stagesRes.error, templatesRes.error].find(Boolean)
       if (firstError) throw firstError
 
       setAgencies((agenciesRes.data || []) as Agency[])
@@ -360,6 +399,8 @@ export function AgencyProductionModule() {
       setPlans((plansRes.data || []) as ProductionPlan[])
       setPlanItems((planItemsRes.data || []) as PlanItem[])
       setDeliverables((deliverablesRes.data || []) as Deliverable[])
+      setPlanStages((stagesRes.data || []) as PlanStage[])
+      setStageTemplates((templatesRes.data || []) as StageTemplate[])
     } catch (error: any) {
       setSchemaError(error?.message || "No se pudo cargar el módulo de agencias")
     } finally {
@@ -447,6 +488,27 @@ export function AgencyProductionModule() {
         .single()
       if (planError) throw planError
 
+      // Create default stages from first template (Producción estándar)
+      const defaultTemplate = stageTemplates.find(t => t.is_system) || stageTemplates[0]
+      if (defaultTemplate?.stages?.length) {
+        const stageRows = defaultTemplate.stages.map((s, i) => ({
+          plan_id: plan.id,
+          name: s.name,
+          position: i,
+          color: s.color || null,
+        }))
+        const { data: createdStages, error: stagesError } = await supabase
+          .from("production_plan_stages")
+          .insert(stageRows)
+          .select()
+        if (stagesError) throw stagesError
+        
+        // Use first stage for new deliverables
+        var firstStageId = createdStages?.[0]?.id || null
+      } else {
+        var firstStageId = null
+      }
+
       const rows: any[] = []
       let globalIndex = 0
 
@@ -477,6 +539,7 @@ export function AgencyProductionModule() {
             channel: draft.channel.trim() || null,
             format: draft.format.trim() || null,
             status: "pending",
+            stage_id: firstStageId,
             priority: "medium",
             due_date: distributedDueDate(globalIndex, totalDeliverables, planForm.period_start, planForm.period_end, planForm.date_strategy),
             responsible_internal_id: selectedResponsible?.id || user?.id || null,
@@ -517,6 +580,119 @@ export function AgencyProductionModule() {
     setSelectedResponsible(null)
     setUserSearchTerm("")
     setUserSearchResults([])
+  }
+
+  // Stage management functions
+  async function createStage(name: string, color: string) {
+    if (!selectedPlanId || !canManageProduction) return
+    setSavingStage(true)
+    try {
+      const currentStages = planStages.filter(s => s.plan_id === selectedPlanId)
+      const nextPosition = currentStages.length > 0 ? Math.max(...currentStages.map(s => s.position)) + 1 : 0
+      
+      const { data, error } = await supabase.from("production_plan_stages").insert({
+        plan_id: selectedPlanId,
+        name: name.trim(),
+        position: nextPosition,
+        color: color || null,
+      }).select().single()
+      
+      if (error) throw error
+      setPlanStages(prev => [...prev, data as PlanStage])
+      setStageDialogOpen(false)
+      setStageForm({ name: "", color: "#94a3b8" })
+      toast.success("Etapa creada")
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo crear la etapa")
+    } finally {
+      setSavingStage(false)
+    }
+  }
+
+  async function updateStage(stageId: string, name: string, color: string) {
+    if (!canManageProduction) return
+    setSavingStage(true)
+    try {
+      const { error } = await supabase.from("production_plan_stages")
+        .update({ name: name.trim(), color: color || null })
+        .eq("id", stageId)
+      
+      if (error) throw error
+      setPlanStages(prev => prev.map(s => s.id === stageId ? { ...s, name: name.trim(), color } : s))
+      setStageDialogOpen(false)
+      setEditingStage(null)
+      setStageForm({ name: "", color: "#94a3b8" })
+      toast.success("Etapa actualizada")
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo actualizar la etapa")
+    } finally {
+      setSavingStage(false)
+    }
+  }
+
+  async function deleteStage(stageId: string) {
+    if (!canManageProduction) return
+    if (!confirm("¿Eliminar esta etapa? Los entregables se quedarán sin etapa asignada.")) return
+    
+    try {
+      const { error } = await supabase.from("production_plan_stages").delete().eq("id", stageId)
+      if (error) throw error
+      setPlanStages(prev => prev.filter(s => s.id !== stageId))
+      // Clear stage_id from affected deliverables
+      setDeliverables(prev => prev.map(d => d.stage_id === stageId ? { ...d, stage_id: null } : d))
+      toast.success("Etapa eliminada")
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo eliminar la etapa")
+    }
+  }
+
+  async function moveDeliverableToStage(deliverableId: string, newStageId: string | null) {
+    if (!canManageProduction) return
+    try {
+      const { error } = await supabase.from("production_deliverables")
+        .update({ stage_id: newStageId })
+        .eq("id", deliverableId)
+      
+      if (error) throw error
+      setDeliverables(prev => prev.map(d => d.id === deliverableId ? { ...d, stage_id: newStageId } : d))
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo mover el entregable")
+    }
+  }
+
+  // Drag and drop handler for kanban
+  const handleDragEnd = useCallback(async (result: DropResult) => {
+    if (!result.destination || !canManageProduction) return
+    
+    const deliverableId = result.draggableId
+    const newStageId = result.destination.droppableId === "unassigned" ? null : result.destination.droppableId
+    
+    // Optimistic update
+    setDeliverables(prev => prev.map(d => d.id === deliverableId ? { ...d, stage_id: newStageId } : d))
+    
+    try {
+      const { error } = await supabase.from("production_deliverables")
+        .update({ stage_id: newStageId })
+        .eq("id", deliverableId)
+      
+      if (error) throw error
+    } catch (error: any) {
+      // Revert on error
+      await loadData()
+      toast.error("No se pudo mover el entregable")
+    }
+  }, [canManageProduction])
+
+  function openCreateStageDialog() {
+    setEditingStage(null)
+    setStageForm({ name: "", color: "#94a3b8" })
+    setStageDialogOpen(true)
+  }
+
+  function openEditStageDialog(stage: PlanStage) {
+    setEditingStage(stage)
+    setStageForm({ name: stage.name, color: stage.color || "#94a3b8" })
+    setStageDialogOpen(true)
   }
 
   function startEditDeliverable(deliverable: Deliverable) {
@@ -575,7 +751,7 @@ export function AgencyProductionModule() {
     }
   }
 
-  async function createDeliverable(title: string, status: string) {
+  async function createDeliverable(title: string, stageId: string | null) {
     if (!selectedPlanId || !selectedAgencyId) return toast.error("Selecciona un plan primero")
     if (!title.trim()) return toast.error("El título es requerido")
     setCreatingDeliverable(true)
@@ -587,7 +763,8 @@ export function AgencyProductionModule() {
         brand_id: plan?.brand_id || null,
         title: title.trim(),
         deliverable_type: "Tarea",
-        status,
+        status: "pending",
+        stage_id: stageId,
         priority: "medium",
         created_by: user?.id || null,
       }).select().single()
@@ -599,25 +776,6 @@ export function AgencyProductionModule() {
       toast.error(error.message || "No se pudo crear el entregable")
     } finally {
       setCreatingDeliverable(false)
-    }
-  }
-
-  async function updateDeliverableStatus(deliverable: Deliverable, nextStatus: string) {
-    if (!canManageProduction) return toast.error("Solo admins pueden cambiar estados")
-    setUpdatingDeliverableId(deliverable.id)
-    const now = new Date().toISOString()
-    const timestampFields: Record<string, string | null> = {}
-    if (nextStatus === "delivered" && !deliverable.delivered_at) timestampFields.delivered_at = now
-    if (nextStatus === "approved" && !deliverable.approved_at) timestampFields.approved_at = now
-    if (nextStatus === "published" && !deliverable.published_at) timestampFields.published_at = now
-    try {
-      const { error } = await supabase.from("production_deliverables").update({ status: nextStatus, updated_at: now, ...timestampFields }).eq("id", deliverable.id)
-      if (error) throw error
-      setDeliverables((prev) => prev.map((item) => (item.id === deliverable.id ? { ...item, status: nextStatus, ...timestampFields } : item)))
-    } catch (error: any) {
-      toast.error(error.message || "No se pudo actualizar el entregable")
-    } finally {
-      setUpdatingDeliverableId(null)
     }
   }
 
@@ -752,34 +910,49 @@ export function AgencyProductionModule() {
         <>
           {planViewMode === "kanban" && (
             <PlanKanbanView 
-              deliverables={planDeliverables} 
-              onStatusChange={updateDeliverableStatus} 
+              stages={selectedPlanStages}
+              deliverables={planDeliverables}
+              onDragEnd={handleDragEnd}
               onEdit={startEditDeliverable} 
+              onEditStage={openEditStageDialog}
+              onDeleteStage={deleteStage}
+              onCreateStage={openCreateStageDialog}
+              onCreateDeliverable={(stageId: string | null) => { setCreateDeliverableStatus(stageId || ""); setCreateDeliverableOpen(true) }}
               updatingId={updatingDeliverableId} 
               canManage={canManageProduction}
-              onCreateDeliverable={(status: string) => { setCreateDeliverableStatus(status); setCreateDeliverableOpen(true) }}
             />
           )}
           {planViewMode === "table" && (
             <PlanTableView 
+              stages={selectedPlanStages}
               deliverables={planDeliverables} 
               brandById={brandById}
-              onStatusChange={updateDeliverableStatus} 
               onEdit={startEditDeliverable} 
               updatingId={updatingDeliverableId} 
               canManage={canManageProduction}
             />
           )}
+          
           {/* Create deliverable dialog */}
-          {createDeliverableOpen && (
-            <CreateDeliverableDialog
-              open={createDeliverableOpen}
-              onClose={() => setCreateDeliverableOpen(false)}
-              onCreate={createDeliverable}
-              status={createDeliverableStatus}
-              creating={creatingDeliverable}
-            />
-          )}
+          <CreateDeliverableDialog
+            open={createDeliverableOpen}
+            onClose={() => setCreateDeliverableOpen(false)}
+            onCreate={createDeliverable}
+            stageId={createDeliverableStatus}
+            stages={selectedPlanStages}
+            creating={creatingDeliverable}
+          />
+
+          {/* Stage edit dialog */}
+          <StageDialog
+            open={stageDialogOpen}
+            onClose={() => { setStageDialogOpen(false); setEditingStage(null) }}
+            stage={editingStage}
+            form={stageForm}
+            setForm={setStageForm}
+            onSave={() => editingStage ? updateStage(editingStage.id, stageForm.name, stageForm.color) : createStage(stageForm.name, stageForm.color)}
+            saving={savingStage}
+          />
         </>
       )}
 
@@ -960,100 +1133,180 @@ function AgencyView({ agency, plans, deliverables, planItems, onPlanClick }: any
   )
 }
 
-// Plan Kanban view - touch-friendly scrollable
-function PlanKanbanView({ deliverables, onStatusChange, onEdit, updatingId, canManage, onCreateDeliverable }: any) {
+// Plan Kanban view with drag & drop - uses configurable stages
+interface PlanKanbanViewProps {
+  stages: PlanStage[]
+  deliverables: Deliverable[]
+  onDragEnd: (result: DropResult) => void
+  onEdit: (deliverable: Deliverable) => void
+  onEditStage: (stage: PlanStage) => void
+  onDeleteStage: (stageId: string) => void
+  onCreateStage: () => void
+  onCreateDeliverable: (stageId: string | null) => void
+  updatingId: string | null
+  canManage: boolean
+}
+
+function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, onDeleteStage, onCreateStage, onCreateDeliverable, updatingId, canManage }: PlanKanbanViewProps) {
+  // Group deliverables by stage_id
+  const deliverablesByStage = useMemo(() => {
+    const map = new Map<string | null, Deliverable[]>()
+    map.set(null, []) // Unassigned
+    stages.forEach(s => map.set(s.id, []))
+    deliverables.forEach(d => {
+      const key = d.stage_id
+      const arr = map.get(key) || map.get(null)!
+      arr.push(d)
+    })
+    return map
+  }, [deliverables, stages])
+
   return (
-    <div className="overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0">
-      <div className="flex gap-4 min-w-max md:grid md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8 md:min-w-0">
-        {FLOW_STATUSES.filter((status) => !["paused", "cancelled"].includes(status.value)).map((status) => {
-          const items = deliverables.filter((d: Deliverable) => d.status === status.value)
+    <DragDropContext onDragEnd={onDragEnd}>
+      <div className="flex gap-6 overflow-x-auto pb-4">
+        {stages.map((stage) => {
+          const items = deliverablesByStage.get(stage.id) || []
           return (
-            <Card key={status.value} className="min-h-[320px] w-[280px] flex-shrink-0 md:w-auto">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center justify-between text-sm">
-                  {status.label}
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{items.length}</Badge>
-                    {canManage && (
-                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => onCreateDeliverable(status.value)}>
-                        <Plus className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {items.map((deliverable: Deliverable) => (
-                  <PlanDeliverableCard 
-                    key={deliverable.id} 
-                    deliverable={deliverable} 
-                    onStatusChange={onStatusChange} 
-                    onEdit={onEdit} 
-                    updating={updatingId === deliverable.id} 
-                    canManage={canManage} 
-                  />
-                ))}
-                {items.length === 0 && (
-                  <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-                    Sin entregas
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <Droppable key={stage.id} droppableId={stage.id}>
+              {(provided: DroppableProvided) => (
+                <div ref={provided.innerRef} {...provided.droppableProps} className="flex-shrink-0 w-80">
+                  <Card className="min-h-[320px] bg-muted/20">
+                    <CardHeader className="pb-3">
+                      <div className="flex justify-between items-center">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          {stage.color && <span className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />}
+                          {stage.name}
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs">{items.length}</Badge>
+                          {canManage && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><MoreHorizontal className="h-3 w-3" /></Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => onCreateDeliverable(stage.id)}><Plus className="h-4 w-4 mr-2" />Agregar entrega</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onEditStage(stage)}><Edit3 className="h-4 w-4 mr-2" />Editar etapa</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onDeleteStage(stage.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar etapa</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {items.map((deliverable, index) => (
+                        <Draggable key={deliverable.id} draggableId={deliverable.id} index={index} isDragDisabled={!canManage}>
+                          {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+                            <div
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              {...dragProvided.dragHandleProps}
+                              className={`rounded-xl border bg-card p-3 shadow-sm cursor-grab transition-shadow ${snapshot.isDragging ? 'ring-2 ring-primary shadow-lg' : 'hover:shadow-md'}`}
+                            >
+                              <DeliverableCardContent deliverable={deliverable} onEdit={onEdit} updating={updatingId === deliverable.id} canManage={canManage} />
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                      {items.length === 0 && (
+                        <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
+                          Arrastra entregas aquí
+                        </div>
+                      )}
+                      {canManage && (
+                        <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-foreground" size="sm" onClick={() => onCreateDeliverable(stage.id)}>
+                          <Plus className="h-4 w-4 mr-2" />Agregar entrega
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </Droppable>
           )
         })}
+        
+        {/* Unassigned column if there are deliverables without stage */}
+        {(deliverablesByStage.get(null)?.length || 0) > 0 && (
+          <Droppable droppableId="unassigned">
+            {(provided: DroppableProvided) => (
+              <div ref={provided.innerRef} {...provided.droppableProps} className="flex-shrink-0 w-80">
+                <Card className="min-h-[320px] bg-muted/30 border-dashed">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Sin etapa</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {(deliverablesByStage.get(null) || []).map((deliverable, index) => (
+                      <Draggable key={deliverable.id} draggableId={deliverable.id} index={index} isDragDisabled={!canManage}>
+                        {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+                          <div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            {...dragProvided.dragHandleProps}
+                            className={`rounded-xl border bg-card p-3 shadow-sm cursor-grab ${snapshot.isDragging ? 'ring-2 ring-primary' : ''}`}
+                          >
+                            <DeliverableCardContent deliverable={deliverable} onEdit={onEdit} updating={updatingId === deliverable.id} canManage={canManage} />
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </Droppable>
+        )}
+
+        {/* Add stage button */}
+        {canManage && (
+          <div className="flex-shrink-0 w-80">
+            <Button variant="outline" className="w-full h-[320px] border-dashed" onClick={onCreateStage}>
+              <Plus className="h-5 w-5 mr-2" />
+              Agregar etapa
+            </Button>
+          </div>
+        )}
       </div>
-    </div>
+    </DragDropContext>
   )
 }
 
-// Simplified deliverable card for plan view (no agency/plan name needed)
-function PlanDeliverableCard({ deliverable, onStatusChange, onEdit, updating, canManage }: any) {
+// Deliverable card content (reusable)
+function DeliverableCardContent({ deliverable, onEdit, updating, canManage }: { deliverable: Deliverable; onEdit: (d: Deliverable) => void; updating: boolean; canManage: boolean }) {
   return (
-    <div className="rounded-xl border bg-card p-3 shadow-sm">
+    <>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <div className="font-medium leading-tight">{deliverable.title}</div>
+          <div className="font-medium leading-tight text-sm">{deliverable.title}</div>
           {deliverable.description && <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{deliverable.description}</div>}
         </div>
-        {isOverdue(deliverable) && <Badge className="bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 flex-shrink-0">Atrasado</Badge>}
-      </div>
-      <div className="mt-3 flex flex-wrap gap-1">
-        <Badge variant="secondary" className="text-xs">{deliverable.deliverable_type}</Badge>
-        {deliverable.channel && <Badge variant="outline" className="text-xs">{deliverable.channel}</Badge>}
-        <Badge variant="outline" className="text-xs capitalize">{deliverable.priority}</Badge>
-      </div>
-      {deliverable.due_date && (
-        <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
-          <CalendarDays className="h-3 w-3" /> Vence {deliverable.due_date}
-        </div>
-      )}
-      {deliverable.external_url && (
-        <a href={deliverable.external_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline">
-          Ver link <ExternalLink className="h-3 w-3" />
-        </a>
-      )}
-      {canManage && (
-        <div className="mt-3 flex gap-2">
-          <select 
-            className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs" 
-            value={deliverable.status} 
-            disabled={updating} 
-            onChange={(e) => onStatusChange(deliverable, e.target.value)}
-          >
-            {FLOW_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-          <Button type="button" size="sm" variant="outline" onClick={() => onEdit(deliverable)}>
+        {canManage && (
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 flex-shrink-0" onClick={(e) => { e.stopPropagation(); onEdit(deliverable) }}>
             <Edit3 className="h-3 w-3" />
           </Button>
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1">
+        <Badge variant="secondary" className="text-xs">{deliverable.deliverable_type}</Badge>
+        {deliverable.channel && <Badge variant="outline" className="text-xs">{deliverable.channel}</Badge>}
+        {isOverdue(deliverable) && <Badge className="bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 text-xs">Atrasado</Badge>}
+      </div>
+      {deliverable.due_date && (
+        <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+          <CalendarDays className="h-3 w-3" /> {deliverable.due_date}
         </div>
       )}
-    </div>
+    </>
   )
 }
 
 // Plan table view
-function PlanTableView({ deliverables, brandById, onStatusChange, onEdit, updatingId, canManage }: any) {
+function PlanTableView({ stages, deliverables, brandById, onEdit, updatingId, canManage }: { stages: PlanStage[]; deliverables: Deliverable[]; brandById: any; onEdit: (d: Deliverable) => void; updatingId: string | null; canManage: boolean }) {
+  const stageById = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages])
+  
   return (
     <Card>
       <CardHeader>
@@ -1068,56 +1321,55 @@ function PlanTableView({ deliverables, brandById, onStatusChange, onEdit, updati
                 <th className="py-3 pr-4">Entregable</th>
                 <th className="py-3 pr-4">Tipo</th>
                 <th className="py-3 pr-4">Canal</th>
+                <th className="py-3 pr-4">Etapa</th>
                 <th className="py-3 pr-4">Prioridad</th>
-                <th className="py-3 pr-4">Estado</th>
                 <th className="py-3 pr-4">Vence</th>
                 <th className="py-3 pr-4">Link</th>
                 <th className="py-3 pr-4">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {deliverables.map((d: Deliverable) => (
-                <tr key={d.id} className="border-b last:border-0">
-                  <td className="py-3 pr-4">
-                    <div className="font-medium">{d.title}</div>
-                    {d.notes && <div className="text-xs text-muted-foreground line-clamp-1">{d.notes}</div>}
-                  </td>
-                  <td className="py-3 pr-4">{d.deliverable_type}</td>
-                  <td className="py-3 pr-4">{d.channel || "—"}</td>
-                  <td className="py-3 pr-4 capitalize">{d.priority}</td>
-                  <td className="py-3 pr-4">
-                    {canManage ? (
-                      <select 
-                        className="h-9 rounded-md border border-input bg-background px-2 text-xs" 
-                        value={d.status} 
-                        disabled={updatingId === d.id} 
-                        onChange={(e) => onStatusChange(d, e.target.value)}
-                      >
-                        {FLOW_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                      </select>
-                    ) : (
-                      <Badge className={statusTone(d.status)}>{statusLabel(d.status)}</Badge>
-                    )}
-                  </td>
-                  <td className="py-3 pr-4">
-                    <span className={isOverdue(d) ? "font-medium text-red-600" : ""}>{d.due_date || "—"}</span>
-                  </td>
-                  <td className="py-3 pr-4">
-                    {d.external_url ? (
-                      <a href={d.external_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    ) : "—"}
-                  </td>
-                  <td className="py-3 pr-4">
-                    {canManage && (
-                      <Button size="sm" variant="outline" onClick={() => onEdit(d)}>
-                        <Edit3 className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {deliverables.map((d: Deliverable) => {
+                const stage = d.stage_id ? stageById.get(d.stage_id) : null
+                return (
+                  <tr key={d.id} className="border-b last:border-0">
+                    <td className="py-3 pr-4">
+                      <div className="font-medium">{d.title}</div>
+                      {d.notes && <div className="text-xs text-muted-foreground line-clamp-1">{d.notes}</div>}
+                    </td>
+                    <td className="py-3 pr-4">{d.deliverable_type}</td>
+                    <td className="py-3 pr-4">{d.channel || "—"}</td>
+                    <td className="py-3 pr-4">
+                      {stage ? (
+                        <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+                          {stage.color && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: stage.color }} />}
+                          {stage.name}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">Sin etapa</span>
+                      )}
+                    </td>
+                    <td className="py-3 pr-4 capitalize">{d.priority}</td>
+                    <td className="py-3 pr-4">
+                      <span className={isOverdue(d) ? "font-medium text-red-600" : ""}>{d.due_date || "—"}</span>
+                    </td>
+                    <td className="py-3 pr-4">
+                      {d.external_url ? (
+                        <a href={d.external_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      ) : "—"}
+                    </td>
+                    <td className="py-3 pr-4">
+                      {canManage && (
+                        <Button size="sm" variant="outline" onClick={() => onEdit(d)}>
+                          <Edit3 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
           {deliverables.length === 0 && <Empty message="No hay entregas en este plan." />}
@@ -1128,46 +1380,118 @@ function PlanTableView({ deliverables, brandById, onStatusChange, onEdit, updati
 }
 
 // Create deliverable dialog
-function CreateDeliverableDialog({ open, onClose, onCreate, status, creating }: { open: boolean; onClose: () => void; onCreate: (title: string, status: string) => void; status: string; creating: boolean }) {
+function CreateDeliverableDialog({ open, onClose, onCreate, stageId, stages, creating }: { 
+  open: boolean
+  onClose: () => void
+  onCreate: (title: string, stageId: string | null) => void
+  stageId: string
+  stages: PlanStage[]
+  creating: boolean 
+}) {
   const [title, setTitle] = useState("")
+  const [selectedStageId, setSelectedStageId] = useState(stageId)
+  
+  // Update selected stage when stageId prop changes
+  useEffect(() => { setSelectedStageId(stageId) }, [stageId])
   
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    onCreate(title, status)
+    onCreate(title, selectedStageId || null)
     setTitle("")
   }
   
-  if (!open) return null
+  const stageName = stages.find(s => s.id === selectedStageId)?.name || "Sin etapa"
   
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <Card className="w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
-        <CardHeader>
-          <CardTitle>Crear entregable</CardTitle>
-          <CardDescription>Se creará con estado: {statusLabel(status)}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Field label="Título">
-              <Input 
-                value={title} 
-                onChange={(e) => setTitle(e.target.value)} 
-                placeholder="Nombre del entregable" 
-                required 
-                autoFocus
-              />
-            </Field>
-            <div className="flex gap-2 justify-end">
-              <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-              <Button type="submit" disabled={creating}>
-                {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Crear
-              </Button>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Crear entregable</DialogTitle>
+          <DialogDescription>Se creará en la etapa: {stageName}</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Field label="Título">
+            <Input 
+              value={title} 
+              onChange={(e) => setTitle(e.target.value)} 
+              placeholder="Nombre del entregable" 
+              required 
+              autoFocus
+            />
+          </Field>
+          <Field label="Etapa">
+            <select 
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={selectedStageId}
+              onChange={(e) => setSelectedStageId(e.target.value)}
+            >
+              {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </Field>
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" disabled={creating || !title.trim()}>
+              {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Crear
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Stage edit/create dialog
+function StageDialog({ open, onClose, stage, form, setForm, onSave, saving }: {
+  open: boolean
+  onClose: () => void
+  stage: PlanStage | null
+  form: { name: string; color: string }
+  setForm: (form: { name: string; color: string }) => void
+  onSave: () => void
+  saving: boolean
+}) {
+  const colors = ["#94a3b8", "#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#ec4899", "#8b5cf6", "#06b6d4"]
+  
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{stage ? "Editar etapa" : "Nueva etapa"}</DialogTitle>
+          <DialogDescription>{stage ? "Modifica el nombre y color de la etapa." : "Agrega una nueva etapa al kanban."}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <Field label="Nombre">
+            <Input 
+              value={form.name} 
+              onChange={(e) => setForm({ ...form, name: e.target.value })} 
+              placeholder="Nombre de la etapa" 
+              autoFocus
+            />
+          </Field>
+          <Field label="Color">
+            <div className="flex gap-2 flex-wrap">
+              {colors.map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setForm({ ...form, color: c })}
+                  className={`w-8 h-8 rounded-full border-2 transition-transform ${form.color === c ? 'ring-2 ring-offset-2 ring-primary scale-110' : 'border-transparent hover:scale-105'}`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
             </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+          </Field>
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button onClick={onSave} disabled={saving || !form.name.trim()}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {stage ? "Guardar" : "Crear"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
