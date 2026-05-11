@@ -104,6 +104,7 @@ type Deliverable = {
   approved_at: string | null
   published_at: string | null
   responsible_internal_id: string | null
+  created_by: string | null
   external_url: string | null
   notes: string | null
   position: number | null

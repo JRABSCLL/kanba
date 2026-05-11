@@ -12,6 +12,8 @@ interface User {
   // From profiles table
   is_active?: boolean
   role?: "member" | "admin"
+  user_type?: "admin" | "internal" | "agency"
+  agency_id?: string | null
 }
 
 interface UserContextType {
