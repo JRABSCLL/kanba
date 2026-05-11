@@ -349,7 +349,37 @@ Reporte: 0/1
 Estado: atención
 ```
 
-## 7. Vistas sugeridas
+## 7. Control de acceso y permisos (v0.11+)
+
+### Matriz de permisos actualizada
+
+| Acción | Admin | Interno | Agencia |
+|--------|-------|---------|---------|
+| **Ver** Dashboard | ✅ Todo | ✅ Todo | ❌ N/A |
+| **Ver** todas agencias | ✅ | ✅ | ❌ Solo suya |
+| **Ver** todos planes | ✅ | ✅ | ❌ Solo suyos |
+| **Ver** entregables | ✅ Todos | ✅ Todos | ✅ Solo propios |
+| **Crear** plan | ✅ | ❌ | ❌ |
+| **Crear** entregable | ✅ | ✅ | ✅ |
+| **Editar** entregable | ✅ Todo | ✅ Si lo creas O eres responsable | ✅ Si lo creaste |
+| **Mover** en kanban | ✅ | ✅ Si es tuyo | ✅ Si es tuyo |
+| **Configurar etapas** | ✅ | ❌ | ❌ |
+| **Quick Launch** | ✅ | ❌ | ❌ |
+
+### Conceptos clave
+
+**Creador (`created_by`)**: Usuario que creó el entregable. Solo creador puede editarlo (salvo admin/responsable).
+
+**Responsable interno (`responsible_internal_id`)**: Usuario interno asignado para revisar. Puede editar el entregable aunque no lo haya creado.
+
+**Agencias**: Ver SOLO su agencia, planes y entregables. Pueden crear nuevos entregables pero solo editar los que crearon.
+
+### RLS Policies (Supabase)
+
+- `production_deliverables` UPDATE: Admin OR creador OR responsable asignado OR agencia con matching agency_id
+- `production_deliverables` INSERT: Admin OR usuario interno en su data OR agencia en su data
+
+## 8. Vistas sugeridas
 
 ### Vista Dashboard
 

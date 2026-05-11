@@ -83,12 +83,16 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 2. **Agency Production** — Track external deliverables with configurable workflow stages (no file uploads)
 3. **Workflow Stages** — Each project and plan has its own customizable stages:
    - Predefined templates: Standard, Video, Social Media, Design
-   - Create/edit/delete stages with custom colors
+   - **Full stage management** — Create, edit, delete, reorder, apply templates from UI
+   - **Quick Launch** — Create plan in 30 seconds with agency + template selection
    - Auto-create stages for existing plans on first load
 4. **Agency Members** — Manage multiple contacts per agency (director, account manager, designer)
 5. **Drag & Drop** — Move tasks/deliverables between stages using @hello-pangea/dnd
-4. **Admin Console** — Activate users, assign roles, manage permissions
-5. **User Search** — Assign internal supervisors to agency deliverables
+6. **Role-based Access** — Granular permissions:
+   - **Admin**: Full control over all data
+   - **Internal**: See all, create/edit deliverables they created or are responsible for
+   - **Agency**: See only own agency, create/edit only own deliverables
+7. **Admin Console** — Activate users, assign roles, manage agency assignments
 
 See [ORGANIZAPP_CONTEXT.md](ORGANIZAPP_CONTEXT.md) for complete architecture and changelog.
 
