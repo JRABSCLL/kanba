@@ -243,7 +243,38 @@ function buildTitle(item: PlanItemDraft, index: number) {
 
 export function AgencyProductionModule() {
   const { user, loading: userLoading } = useUser()
-  const canManageProduction = user?.role === "admin" && user?.is_active === true
+  
+  // Permission helpers
+  const isAdmin = user?.role === "admin" && user?.is_active === true
+  const isInternal = user?.user_type === "internal" && user?.is_active === true
+  const isAgency = user?.user_type === "agency" && user?.is_active === true
+  
+  // Can user manage (create/delete/edit structure)
+  const canManageProduction = isAdmin
+  
+  // Can user create deliverables (admin, internal, or agency for their own)
+  const canCreateDeliverable = isAdmin || isInternal || isAgency
+  
+  // Can user edit a specific deliverable
+  const canEditDeliverable = (deliverable: Deliverable): boolean => {
+    if (isAdmin) return true // Admin can edit anything
+    if (isInternal) {
+      // Internal can edit if they created it or are responsible for it
+      return deliverable.created_by === user?.id || deliverable.responsible_internal_id === user?.id
+    }
+    if (isAgency) {
+      // Agency can edit only if they created it
+      return deliverable.created_by === user?.id
+    }
+    return false
+  }
+  
+  // Can user see a plan (admin sees all, internal sees all, agency sees only their agency)
+  const canSeePlan = (planAgencyId: string): boolean => {
+    if (isAdmin || isInternal) return true
+    if (isAgency) return user?.agency_id === planAgencyId
+    return false
+  }
 
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -387,24 +418,41 @@ export function AgencyProductionModule() {
   async function loadData() {
     setRefreshing(true)
     try {
-      const [agenciesRes, brandsRes, plansRes, planItemsRes, deliverablesRes, stagesRes, templatesRes] = await Promise.all([
-        supabase.from("agencies").select("*").order("created_at", { ascending: false }),
-        supabase.from("brands").select("*").order("name", { ascending: true }),
-        supabase.from("production_plans").select("*").order("created_at", { ascending: false }),
-        supabase.from("production_plan_items").select("*").order("created_at", { ascending: true }),
-        supabase.from("production_deliverables").select("*").order("created_at", { ascending: false }),
-        supabase.from("production_plan_stages").select("*").order("position", { ascending: true }),
-        supabase.from("production_stage_templates").select("*").order("is_system", { ascending: false }),
-      ])
+      const queries = {
+        agencies: supabase.from("agencies").select("*").order("created_at", { ascending: false }),
+        brands: supabase.from("brands").select("*").order("name", { ascending: true }),
+        plans: supabase.from("production_plans").select("*").order("created_at", { ascending: false }),
+        planItems: supabase.from("production_plan_items").select("*").order("created_at", { ascending: true }),
+        deliverables: supabase.from("production_deliverables").select("*").order("created_at", { ascending: false }),
+        stages: supabase.from("production_plan_stages").select("*").order("position", { ascending: true }),
+        templates: supabase.from("production_stage_templates").select("*").order("is_system", { ascending: false }),
+      }
+
+      const [agenciesRes, brandsRes, plansRes, planItemsRes, deliverablesRes, stagesRes, templatesRes] = await Promise.all(
+        Object.values(queries)
+      )
 
       const firstError = [agenciesRes.error, brandsRes.error, plansRes.error, planItemsRes.error, deliverablesRes.error, stagesRes.error, templatesRes.error].find(Boolean)
       if (firstError) throw firstError
 
-      setAgencies((agenciesRes.data || []) as Agency[])
+      let agenciesData = (agenciesRes.data || []) as Agency[]
+      let plansData = (plansRes.data || []) as ProductionPlan[]
+      let deliverablesData = (deliverablesRes.data || []) as Deliverable[]
+
+      // Filter based on user type
+      if (isAgency && user?.agency_id) {
+        // Agency users only see their own agency and related data
+        agenciesData = agenciesData.filter(a => a.id === user.agency_id)
+        plansData = plansData.filter(p => p.agency_id === user.agency_id)
+        deliverablesData = deliverablesData.filter(d => d.agency_id === user.agency_id)
+      }
+      // Internal and Admin see all
+
+      setAgencies(agenciesData)
       setBrands((brandsRes.data || []) as Brand[])
-      setPlans((plansRes.data || []) as ProductionPlan[])
+      setPlans(plansData)
       setPlanItems((planItemsRes.data || []) as PlanItem[])
-      setDeliverables((deliverablesRes.data || []) as Deliverable[])
+      setDeliverables(deliverablesData)
       setPlanStages((stagesRes.data || []) as PlanStage[])
       setStageTemplates((templatesRes.data || []) as StageTemplate[])
     } catch (error: any) {
@@ -788,7 +836,9 @@ export function AgencyProductionModule() {
   }
 
   function startEditDeliverable(deliverable: Deliverable) {
-    if (!canManageProduction) return toast.error("Solo admins pueden editar entregables")
+    if (!canEditDeliverable(deliverable)) {
+      return toast.error("No tienes permiso para editar este entregable")
+    }
     setEditingDeliverable(deliverable)
     setDeliverableForm({
       title: deliverable.title || "",
@@ -1054,6 +1104,7 @@ export function AgencyProductionModule() {
               onCreateDeliverable={(stageId: string | null) => { setCreateDeliverableStatus(stageId || ""); setCreateDeliverableOpen(true) }}
               updatingId={updatingDeliverableId} 
               canManage={canManageProduction}
+              canEditDeliverable={canEditDeliverable}
             />
           )}
           {planViewMode === "table" && (
@@ -1326,9 +1377,10 @@ interface PlanKanbanViewProps {
   onCreateDeliverable: (stageId: string | null) => void
   updatingId: string | null
   canManage: boolean
+  canEditDeliverable: (d: Deliverable) => boolean
 }
 
-function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, onDeleteStage, onCreateStage, onCreateDeliverable, updatingId, canManage }: PlanKanbanViewProps) {
+function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, onDeleteStage, onCreateStage, onCreateDeliverable, updatingId, canManage, canEditDeliverable }: PlanKanbanViewProps) {
   // Group deliverables by stage_id
   const deliverablesByStage = useMemo(() => {
     const map = new Map<string | null, Deliverable[]>()
@@ -1365,7 +1417,7 @@ function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, 
                   </CardHeader>
                   <CardContent className="space-y-2 px-3 pb-3">
                     {unassignedItems.map((deliverable, index) => (
-                      <Draggable key={deliverable.id} draggableId={deliverable.id} index={index} isDragDisabled={!canManage}>
+                      <Draggable key={deliverable.id} draggableId={deliverable.id} index={index} isDragDisabled={!canEditDeliverable(deliverable)}>
                         {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
                           <div
                             ref={dragProvided.innerRef}
@@ -1373,7 +1425,7 @@ function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, 
                             {...dragProvided.dragHandleProps}
                             className={`rounded-lg border bg-card p-2 shadow-sm cursor-grab text-sm ${snapshot.isDragging ? 'ring-2 ring-primary' : ''}`}
                           >
-                            <DeliverableCardContent deliverable={deliverable} onEdit={onEdit} updating={updatingId === deliverable.id} canManage={canManage} />
+                            <DeliverableCardContent deliverable={deliverable} onEdit={onEdit} updating={updatingId === deliverable.id} canManage={canEditDeliverable(deliverable)} />
                           </div>
                         )}
                       </Draggable>
@@ -1418,7 +1470,7 @@ function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, 
                     </CardHeader>
                     <CardContent className="space-y-2 px-3 pb-3">
                       {items.map((deliverable, index) => (
-                        <Draggable key={deliverable.id} draggableId={deliverable.id} index={index} isDragDisabled={!canManage}>
+                        <Draggable key={deliverable.id} draggableId={deliverable.id} index={index} isDragDisabled={!canEditDeliverable(deliverable)}>
                           {(dragProvided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
                             <div
                               ref={dragProvided.innerRef}
@@ -1426,7 +1478,7 @@ function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, 
                               {...dragProvided.dragHandleProps}
                               className={`rounded-lg border bg-card p-2 shadow-sm cursor-grab text-sm transition-shadow ${snapshot.isDragging ? 'ring-2 ring-primary shadow-lg' : 'hover:shadow-md'}`}
                             >
-                              <DeliverableCardContent deliverable={deliverable} onEdit={onEdit} updating={updatingId === deliverable.id} canManage={canManage} />
+                              <DeliverableCardContent deliverable={deliverable} onEdit={onEdit} updating={updatingId === deliverable.id} canManage={canEditDeliverable(deliverable)} />
                             </div>
                           )}
                         </Draggable>
