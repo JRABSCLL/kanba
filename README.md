@@ -2,7 +2,7 @@
 
 Internal project management and production control system for managing your organization's projects and external agency work.
 
-**Tech Stack:** Next.js 16, React 19, Supabase, TypeScript, Tailwind CSS, shadcn/ui, @hello-pangea/dnd
+**Tech Stack:** Next.js 13.5.1, React 18, Supabase, TypeScript, Tailwind CSS, shadcn/ui, @hello-pangea/dnd
 
 ## Features
 

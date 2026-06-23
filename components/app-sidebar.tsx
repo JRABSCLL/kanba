@@ -3,17 +3,11 @@
 import * as React from "react"
 import {
   FolderIcon,
-  BarChartIcon,
   SettingsIcon,
   PlusCircleIcon,
   LogOutIcon,
   ChevronDownIcon,
   FolderOpenIcon,
-  NotepadTextIcon,
-  PlugZap,
-  List,
-  Brain,
-  Calendar,
   Bookmark,
   ShieldCheck,
   Sun,
@@ -71,17 +65,11 @@ interface AppSidebarProps {
 }
 
 const menuItems = [
-  { title: "Dashboard", url: "/dashboard", icon: Home },
-  { title: "Projects", url: "/dashboard/projects", icon: FolderIcon },
+  { title: "Inicio", url: "/dashboard", icon: Home },
+  { title: "Proyectos", url: "/dashboard/projects", icon: FolderIcon },
   { title: "Producción de Agencias", url: "/dashboard/agency-production-v2", icon: Building2 },
-  { title: "Bookmarks", url: "/dashboard/bookmarks", icon: Bookmark },
-  { title: "Notes (próximamente)", url: "/dashboard/notes", icon: NotepadTextIcon, disabled: true },
-  { title: "Analytics (próximamente)", url: "/dashboard/analytics", icon: BarChartIcon, disabled: true },
-  { title: "Integrations (próximamente)", url: "/dashboard/integrations", icon: PlugZap, disabled: true },
-  { title: "Lists (próximamente)", url: "/dashboard/listd", icon: List, disabled: true },
-  { title: "AI Planner (próximamente)", url: "/dashboard/integrations2", icon: Brain, disabled: true },
-  { title: "Meetings (próximamente)", url: "/dashboard/integrations3", icon: Calendar, disabled: true },
-  { title: "Settings", url: "/dashboard/settings", icon: SettingsIcon },
+  { title: "Guardados", url: "/dashboard/bookmarks", icon: Bookmark },
+  { title: "Ajustes", url: "/dashboard/settings", icon: SettingsIcon },
 ]
 
 export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
@@ -131,10 +119,16 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
     if (!user) return;
     setLoadingProjects(true);
     try {
-      const { data: projects, error } = await supabase
-        .from('projects')
-        .select('id, name, slug, user_id')
-        .eq('user_id', user.id)
+      // Mismo criterio que el dashboard: admin ve todos los proyectos, el resto
+      // solo aquellos donde es miembro (project_members). Antes solo mostraba
+      // los proyectos en propiedad, así que un colaborador no veía sus proyectos
+      // compartidos en el sidebar.
+      const isAdminUser = user.role === 'admin' && user.is_active === true;
+      const projectsQuery = isAdminUser
+        ? supabase.from('projects').select('id, name, slug, user_id')
+        : supabase.from('projects').select('id, name, slug, user_id, project_members!inner(role)');
+
+      const { data: projects, error } = await projectsQuery
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -193,7 +187,7 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => {
-                if (item.title === "Projects") {
+                if (item.url === "/dashboard/projects") {
                   return (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton

@@ -79,15 +79,16 @@ export default function DashboardPage() {
       
       setProfile(profile);
 
-      // Get user projects (both owned and shared)
-      const { data: projects } = await supabase
-        .from('projects')
-        .select(`
-          *,
-          project_members!inner(role)
-        `)
-        .order('created_at', { ascending: false });
-      
+      // Admins ven TODOS los proyectos de la organización; los miembros solo
+      // aquellos donde están en project_members. El `!inner` restringe a los
+      // proyectos con membresía, así que para admin usamos un left join.
+      const isAdmin = profile?.role === 'admin' && profile?.is_active === true;
+      const projectsQuery = isAdmin
+        ? supabase.from('projects').select('*, project_members(role)')
+        : supabase.from('projects').select('*, project_members!inner(role)');
+
+      const { data: projects } = await projectsQuery.order('created_at', { ascending: false });
+
       setProjects(projects || []);
 
       // Get tasks assigned to the user

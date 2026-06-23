@@ -54,6 +54,15 @@ function TaskCard({ task, index, onEdit, onDelete, onViewComments, onToggleDone,
     }
   };
 
+  const priorityLabel = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'Alta';
+      case 'medium': return 'Media';
+      case 'low': return 'Baja';
+      default: return priority;
+    }
+  };
+
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString();
   const assignedUser = projectMembers.find(member => member.user_id === task.assigned_to);
 
@@ -103,9 +112,9 @@ function TaskCard({ task, index, onEdit, onDelete, onViewComments, onToggleDone,
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onEdit(task)}><Edit className="h-4 w-4 mr-2" />Edit</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onViewComments(task)}><MessageSquare className="h-4 w-4 mr-2" />Comments</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onDelete(task.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Delete</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onEdit(task)}><Edit className="h-4 w-4 mr-2" />Editar</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onViewComments(task)}><MessageSquare className="h-4 w-4 mr-2" />Comentarios</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onDelete(task.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
@@ -122,9 +131,9 @@ function TaskCard({ task, index, onEdit, onDelete, onViewComments, onToggleDone,
               )}
               <div className="flex justify-between items-center text-xs text-muted-foreground">
                 <div className="flex items-center space-x-4">
-                    <Badge variant="secondary" className={`text-xs ${getPriorityColor(task.priority)}`}><Flag className="h-3 w-3 mr-1" />{task.priority}</Badge>
+                    <Badge variant="secondary" className={`text-xs ${getPriorityColor(task.priority)}`}><Flag className="h-3 w-3 mr-1" />{priorityLabel(task.priority)}</Badge>
                 </div>
-                <div className="flex items-center"><User className="h-3 w-3 mr-1" />{assignedUser ? (assignedUser.profiles.full_name || assignedUser.profiles.email) : 'Unassigned'}</div>
+                <div className="flex items-center"><User className="h-3 w-3 mr-1" />{assignedUser ? (assignedUser.profiles.full_name || assignedUser.profiles.email) : 'Sin asignar'}</div>
               </div>
               <div className="flex justify-end">
               {task.due_date && <div className="flex text-xs items-center"><Calendar className="h-3 w-3 mr-1" />{formatDate(task.due_date)}</div>}
@@ -164,6 +173,20 @@ export function KanbanBoard({
   onToggleDone,
   readOnly = false,
 }: KanbanBoardProps) {
+  if (columns.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center text-center border border-dashed rounded-xl py-16 px-6 text-muted-foreground">
+        <Plus className="h-8 w-8 mb-3 opacity-50" />
+        <p className="text-sm font-medium text-foreground">Aún no hay columnas</p>
+        <p className="text-xs mt-1">
+          {readOnly
+            ? "Este proyecto todavía no tiene columnas."
+            : "Crea tu primera columna para empezar a organizar tareas."}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <div className="flex gap-3 overflow-x-auto pb-4">
@@ -187,8 +210,8 @@ export function KanbanBoard({
                               <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><MoreHorizontal className="h-3 w-3" /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => onEditColumn(column)}><Edit className="h-4 w-4 mr-2" />Rename</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => onDeleteColumn(column.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Delete</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => onEditColumn(column)}><Edit className="h-4 w-4 mr-2" />Renombrar</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => onDeleteColumn(column.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -215,7 +238,7 @@ export function KanbanBoard({
                     {provided.placeholder}
                     {!readOnly && (
                       <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-foreground text-xs h-8" size="sm" onClick={() => onAddTask(column.id)}>
-                        <Plus className="h-3 w-3 mr-1" />Add task
+                        <Plus className="h-3 w-3 mr-1" />Añadir tarea
                       </Button>
                     )}
                   </CardContent>

@@ -56,7 +56,7 @@ async function loadProfileForUser(authUser: any, timeoutMs = 8000): Promise<User
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("full_name, avatar_url, is_active, role")
+        .select("full_name, avatar_url, is_active, role, user_type, agency_id")
         .eq("id", authUser.id)
         .maybeSingle()
 
@@ -70,13 +70,15 @@ async function loadProfileForUser(authUser: any, timeoutMs = 8000): Promise<User
         return base
       }
 
-      console.log("[v0] loadProfileForUser: success - is_active:", data.is_active, "role:", data.role)
+      console.log("[v0] loadProfileForUser: success - is_active:", data.is_active, "role:", data.role, "user_type:", data.user_type)
       return {
         ...base,
         full_name: data.full_name || base.full_name,
         avatar_url: data.avatar_url || base.avatar_url,
         is_active: data.is_active as boolean,
         role: data.role as User["role"],
+        user_type: (data.user_type as User["user_type"]) ?? undefined,
+        agency_id: (data.agency_id as string | null) ?? null,
       }
     } catch (err) {
       console.log("[v0] loadProfileForUser: unexpected error", err)
