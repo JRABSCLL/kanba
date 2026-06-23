@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { EmptyState, PageLoader } from '@/components/ui/states';
 import { useUser } from '@/components/user-provider';
 import { toast } from 'sonner';
 import { Plus, FolderOpen, Calendar, Users, Bell, CheckSquare, User, Sun, Moon } from 'lucide-react';
@@ -142,7 +143,7 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error('Error:', error);
-      toast.error('Failed to load dashboard');
+      toast.error('No se pudo cargar el panel');
     } finally {
       setLoading(false);
     }
@@ -163,6 +164,32 @@ export default function DashboardPage() {
     return project.project_members?.[0]?.role || 'member';
   };
 
+  const roleLabel = (role: string) => {
+    switch (role) {
+      case 'owner': return 'Propietario';
+      case 'admin': return 'Admin';
+      case 'viewer': return 'Lector';
+      case 'member': return 'Miembro';
+      default: return role;
+    }
+  };
+
+  const priorityLabel = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'Alta';
+      case 'medium': return 'Media';
+      case 'low': return 'Baja';
+      default: return priority;
+    }
+  };
+
+  const formatDate = (value: string) =>
+    new Date(value).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  const monthCount = projects.filter(
+    (p) => new Date(p.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+  ).length;
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high':
@@ -177,194 +204,124 @@ export default function DashboardPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full w-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <PageLoader label="Cargando panel" />;
   }
 
   return (
-    <>
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+    <div className="mx-auto w-full max-w-6xl">
+      {/* Cabecera */}
+      <header className="mb-8 flex items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Welcome back, {profile?.full_name || user?.email} 👋
-          </p>
-          
+          <h1 className="text-2xl font-semibold tracking-tight">Inicio</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{profile?.full_name || user?.email}</p>
         </div>
-      </div>
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between  ">
-            <CardTitle className="text-sm font-medium">Total Projects</CardTitle>
-            <div className="text-sm font-bold">{projects.length}</div>            
-          </CardHeader>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between  ">
-            <CardTitle className="text-sm font-medium">Assigned Tasks</CardTitle>
-            <div className="text-sm font-bold">{assignedTasks.length}</div>
-          </CardHeader>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between ">
-            <CardTitle className="text-sm font-medium">This Month</CardTitle>
-            <div className="text-sm font-bold">
-              {projects.filter(p => new Date(p.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)).length}
-            </div>            
-          </CardHeader>
-        </Card>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Projects */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Your Projects</h2>
-            <Button 
-              onClick={() => router.push('/dashboard/projects/new')}
-              disabled={!canCreateProject()}
-              size="xs"
-              className='text-xs'
-            >
-              <Plus className="h-4 w-4 " />
-              New Project
-            </Button>
+        <Button
+          size="sm"
+          onClick={() => router.push('/dashboard/projects/new')}
+          disabled={!canCreateProject()}
+        >
+          <Plus className="mr-1.5 h-4 w-4" />
+          Nuevo proyecto
+        </Button>
+      </header>
+
+      {/* Métricas */}
+      <div className="mb-10 grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3">
+        {[
+          { label: 'Proyectos', value: projects.length, icon: FolderOpen },
+          { label: 'Tareas asignadas', value: assignedTasks.length, icon: CheckSquare },
+          { label: 'Creados este mes', value: monthCount, icon: Calendar },
+        ].map((kpi) => (
+          <div key={kpi.label} className="bg-card p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{kpi.label}</span>
+              <kpi.icon className="h-4 w-4 text-muted-foreground/50" strokeWidth={1.75} />
+            </div>
+            <div className="mt-2 text-3xl font-semibold tabular-nums tracking-tight">{kpi.value}</div>
           </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        {/* Proyectos */}
+        <section className="lg:col-span-2">
+          <h2 className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Proyectos</h2>
 
           {projects.length === 0 ? (
-            <Card className="text-center py-12">
-              <CardContent>
-                <FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <CardTitle className="mb-2">No projects yet</CardTitle>
-                <CardDescription className="mb-4">
-                  Crea tu primer proyecto para comenzar en OrganizAPP
-                </CardDescription>
-                <Button onClick={() => router.push('/dashboard/projects/new')}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Your First Project
+            <EmptyState
+              icon={FolderOpen}
+              title="No hay proyectos"
+              description="Crea un proyecto para empezar a organizar tareas."
+              action={
+                <Button size="sm" onClick={() => router.push('/dashboard/projects/new')}>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Nuevo proyecto
                 </Button>
-              </CardContent>
-            </Card>
+              }
+            />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {projects.map((project) => {
                 const role = getProjectRole(project);
                 const isOwner = project.user_id === user?.id;
-                
+
                 return (
-                  <Card key={project.id} onClick={() => router.push(`/dashboard/projects/${project.slug}`)} className="hover:shadow-md transition-shadow cursor-pointer border-gradient">
-
-                    <CardHeader>
-
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <CardTitle className="text-lg">{project.name}</CardTitle>
-                          <CardDescription>
-                            {project.description || 'No description'}
-                          </CardDescription>
-                        </div>
-                        <Badge variant={isOwner ? 'default' : 'secondary'} className="ml-2">
-                          {role}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">
-                          {isOwner ? 'Created' : 'Joined'} {new Date(project.created_at).toLocaleDateString()}
-                        </span>
-                      
-                      </div>
-                    </CardContent>
-                    </Card>
+                  <button
+                    key={project.id}
+                    onClick={() => router.push(`/dashboard/projects/${project.slug}`)}
+                    className="flex flex-col rounded-lg border bg-card p-4 text-left transition-colors hover:border-foreground/25"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-medium leading-tight">{project.name}</span>
+                      <Badge variant="outline" className="shrink-0 text-[11px] font-normal">{roleLabel(role)}</Badge>
+                    </div>
+                    <p className="mt-1.5 line-clamp-2 text-sm text-muted-foreground">
+                      {project.description || 'Sin descripción'}
+                    </p>
+                    <span className="mt-3 text-xs text-muted-foreground">
+                      {isOwner ? 'Creado' : 'Añadido'} el {formatDate(project.created_at)}
+                    </span>
+                  </button>
                 );
               })}
             </div>
           )}
-        </div>
+        </section>
 
-        {/* Assigned Tasks Sidebar */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <User className="h-5 w-5 mr-2" />
-                <span className="text-lg font-normal">Tasks Assigned to You</span>
-              </CardTitle>
-              <CardDescription>
-                Recent tasks you need to work on
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {assignedTasks.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <CheckSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No tasks assigned</p>
-                  <p className="text-sm">Tasks assigned to you will appear here</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {assignedTasks.map((task) => (
-                    <div key={task.id} className="border rounded-lg p-3 hover:bg-muted/50 transition-colors">
-                      <div className="flex items-start justify-between mb-2">
-                        <h4 className="font-medium text-sm leading-tight flex-1">
-                          {task.title}
-                        </h4>
-                        <Badge 
-                          variant="secondary" 
-                          className={`text-xs ml-2 ${getPriorityColor(task.priority)}`}
-                        >
-                          {task.priority}
-                        </Badge>
-                      </div>
-                      
-                      <div className="text-xs text-muted-foreground space-y-1">
-                        <p>📁 {task.project_name}</p>
-                        <p>📋 {task.column_name}</p>
-                        {task.due_date && (
-                          <p>📅 Due {new Date(task.due_date).toLocaleDateString()}</p>
-                        )}
-                      </div>
-                      
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="w-full mt-3"
-                        onClick={() => router.push(`/dashboard/projects/${task.project_slug}`)}
-                      >
-                        View Project
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Tareas asignadas */}
+        <aside>
+          <h2 className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tareas asignadas</h2>
 
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>
-              <span className="text-lg font-normal">
-              Quick Actions</span></CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full justify-start" asChild>
-                <Link href="/dashboard/projects/new">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create New Project
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+          {assignedTasks.length === 0 ? (
+            <EmptyState icon={CheckSquare} title="Sin tareas asignadas" />
+          ) : (
+            <div className="space-y-3">
+              {assignedTasks.map((task) => (
+                <div key={task.id} className="rounded-lg border bg-card p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-sm font-medium leading-tight">{task.title}</span>
+                    <Badge variant="secondary" className={`shrink-0 text-[11px] ${getPriorityColor(task.priority)}`}>
+                      {priorityLabel(task.priority)}
+                    </Badge>
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    {task.project_name} · {task.column_name}
+                  </p>
+                  {task.due_date && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">Vence el {formatDate(task.due_date)}</p>
+                  )}
+                  <button
+                    onClick={() => router.push(`/dashboard/projects/${task.project_slug}`)}
+                    className="mt-2 text-xs font-medium underline-offset-4 hover:underline"
+                  >
+                    Abrir proyecto
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </aside>
       </div>
-    </>
+    </div>
   );
 }

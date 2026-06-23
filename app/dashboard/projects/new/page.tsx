@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { ArrowLeft, Loader2, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { PageLoader } from '@/components/ui/states';
 
 interface Profile {
   id: string;
@@ -65,7 +66,7 @@ export default function NewProjectPage() {
       setProjectCount(count || 0);
     } catch (error) {
       console.error('Error:', error);
-      toast.error('Failed to load user data');
+      toast.error('No se pudieron cargar los datos del usuario');
     } finally {
       setLoading(false);
     }
@@ -156,17 +157,17 @@ export default function NewProjectPage() {
     }
 
     if (!projectSlug.trim()) {
-      toast.error('Please enter a project slug');
+      toast.error('Introduce un identificador');
       return;
     }
 
     if (slugAvailable === false) {
-      toast.error('Please choose a different slug. This one is already taken.');
+      toast.error('Ese identificador ya está en uso. Elige otro.');
       return;
     }
 
     if (slugAvailable === null || checkingSlug) {
-      toast.error('Please wait while we check slug availability');
+      toast.error('Espera mientras comprobamos el identificador');
       return;
     }
 
@@ -189,9 +190,9 @@ export default function NewProjectPage() {
 
       // Create default columns
       const defaultColumns = [
-        { name: 'To Do', position: 0 },
-        { name: 'In Progress', position: 1 },
-        { name: 'Done', position: 2 },
+        { name: 'Por hacer', position: 0 },
+        { name: 'En progreso', position: 1 },
+        { name: 'Hecho', position: 2 },
       ];
 
       const { error: columnsError } = await supabase
@@ -210,60 +211,47 @@ export default function NewProjectPage() {
         (window as any).handleProjectUpdate('create', project.id);
       }
 
-      toast.success('Project created successfully!');
+      toast.success('Proyecto creado');
       router.push(`/dashboard/projects/${project.slug}`);
     } catch (error: any) {
       console.error('Error creating project:', error);
-      toast.error(error.message || 'Failed to create project');
+      toast.error(error.message || 'No se pudo crear el proyecto');
     } finally {
       setCreating(false);
     }
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full w-full">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-    </div>
-    );
+    return <PageLoader label="Cargando" />;
   }
 
   return (
     <>
-    <div className="sm:mx-60">
-      {/* Header */}
-      <div className="mb-8 ">
-         
-        <h1 className="text-xl font-semibold">Create New Project</h1>
-        <p className="text-muted-foreground">
-          Set up a new Kanban project to organize your work
-        </p>
+    <div className="mx-auto max-w-xl">
+      {/* Cabecera */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight">Nuevo proyecto</h1>
       </div>
-      {/* Form */}
+      {/* Formulario */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center text-lg">
-            Project Details
-          </CardTitle>
-          <CardDescription>
-            Enter the basic information for your new project
-          </CardDescription>
+          <CardTitle className="text-lg">Datos del proyecto</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="name">Project Name *</Label>
+              <Label htmlFor="name">Nombre del proyecto *</Label>
               <Input
                 id="name"
                 type="text"
-                placeholder="Enter project name"
+                placeholder="Nombre del proyecto"
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="slug">Project Slug *</Label>
+              <Label htmlFor="slug">Identificador (slug) *</Label>
               <div className="relative">
                 <Input
                   id="slug"
@@ -288,35 +276,35 @@ export default function NewProjectPage() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                This will be used in the URL. Only lowercase letters, numbers, and hyphens are allowed.
+                Se usa en la URL. Solo minúsculas, números y guiones.
               </p>
               {slugAvailable === false && (
                 <p className="text-xs text-red-500">
-                  This slug is already taken. Please choose a different one.
+                  Ese identificador ya está en uso. Elige otro.
                 </p>
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">Descripción</Label>
               <Textarea
                 id="description"
-                placeholder="Enter project description (optional)"
+                placeholder="Descripción (opcional)"
                 value={projectDescription}
                 onChange={(e) => setProjectDescription(e.target.value)}
                 rows={4}
               />
             </div>
             <div className="flex gap-3 pt-4">
-              <Button 
-                type="submit" 
-                disabled={creating || !canCreateProject() || slugAvailable !== true || checkingSlug} 
+              <Button
+                type="submit"
+                disabled={creating || !canCreateProject() || slugAvailable !== true || checkingSlug}
                 className="flex-1"
               >
                 {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Create Project
+                Crear proyecto
               </Button>
               <Button type="button" variant="outline" asChild>
-                <Link href="/dashboard">Cancel</Link>
+                <Link href="/dashboard">Cancelar</Link>
               </Button>
             </div>
           </form>

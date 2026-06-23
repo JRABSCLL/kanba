@@ -38,6 +38,7 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import { TeamManagement } from '@/components/team-management';
+import { EmptyState, PageLoader } from '@/components/ui/states';
 import { TaskComments } from '@/components/task-comments';
 import { ActivityFeed } from '@/components/activity-feed';
 import { supabase } from '@/lib/supabase';
@@ -147,7 +148,7 @@ export default function ProjectPage() {
       await loadProject();
     } catch (error) {
       console.error('Error:', error);
-      toast.error('Failed to load project');
+      toast.error('No se pudo cargar el proyecto');
     } finally {
       setLoading(false);
     }
@@ -207,7 +208,7 @@ export default function ProjectPage() {
       setColumns(columnsWithTasks);
     } catch (error: any) {
       console.error('Error loading project:', error);
-      toast.error('Failed to load project');
+      toast.error('No se pudo cargar el proyecto');
       router.push('/dashboard');
     }
   };
@@ -252,7 +253,7 @@ export default function ProjectPage() {
     e.preventDefault();
     
     if (!user || !selectedColumnId || !taskTitle.trim()) {
-      toast.error('Please fill in all required fields');
+      toast.error('Completa los campos obligatorios');
       return;
     }
 
@@ -281,7 +282,7 @@ export default function ProjectPage() {
 
       if (error) throw error;
 
-      toast.success('Task created successfully!');
+      toast.success('Tarea creada');
       
       // Reset form
       resetTaskForm();
@@ -301,7 +302,7 @@ export default function ProjectPage() {
     e.preventDefault();
     
     if (!user || !editingTask || !taskTitle.trim()) {
-      toast.error('Please fill in all required fields');
+      toast.error('Completa los campos obligatorios');
       return;
     }
 
@@ -323,7 +324,7 @@ export default function ProjectPage() {
 
       if (error) throw error;
 
-      toast.success('Task updated successfully!');
+      toast.success('Tarea actualizada');
       
       // Reset form
       resetTaskForm();
@@ -341,7 +342,7 @@ export default function ProjectPage() {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!confirm('Are you sure you want to delete this task?')) {
+    if (!confirm('¿Eliminar esta tarea?')) {
       return;
     }
 
@@ -353,7 +354,7 @@ export default function ProjectPage() {
 
       if (error) throw error;
 
-      toast.success('Task deleted successfully!');
+      toast.success('Tarea eliminada');
       await loadProject();
     } catch (error: any) {
       console.error('Error deleting task:', error);
@@ -385,7 +386,7 @@ export default function ProjectPage() {
     e.preventDefault();
     
     if (!columnName.trim()) {
-      toast.error('Please enter a column name');
+      toast.error('Introduce un nombre de columna');
       return;
     }
 
@@ -408,7 +409,7 @@ export default function ProjectPage() {
 
       if (error) throw error;
 
-      toast.success('Column created successfully!');
+      toast.success('Columna creada');
       
       // Reset form
       setColumnName('');
@@ -428,7 +429,7 @@ export default function ProjectPage() {
     e.preventDefault();
     
     if (!editingColumn || !columnName.trim()) {
-      toast.error('Please enter a column name');
+      toast.error('Introduce un nombre de columna');
       return;
     }
 
@@ -445,7 +446,7 @@ export default function ProjectPage() {
 
       if (error) throw error;
 
-      toast.success('Column renamed successfully!');
+      toast.success('Columna renombrada');
       
       // Reset form
       setColumnName('');
@@ -471,7 +472,7 @@ export default function ProjectPage() {
 
       if (error) throw error;
 
-      toast.success('Column deleted successfully!');
+      toast.success('Columna eliminada');
       await loadProject();
     } catch (error: any) {
       console.error('Error deleting column:', error);
@@ -483,7 +484,7 @@ export default function ProjectPage() {
     e.preventDefault();
     
     if (!project || !projectName.trim()) {
-      toast.error('Please enter a project name');
+      toast.error('Introduce un nombre de proyecto');
       return;
     }
 
@@ -501,7 +502,7 @@ export default function ProjectPage() {
 
       if (error) throw error;
 
-      toast.success('Project updated successfully!');
+      toast.success('Proyecto actualizado');
       setProjectRenameDialogOpen(false);
       await loadProject();
       
@@ -558,7 +559,7 @@ export default function ProjectPage() {
 
       if (projectError) throw projectError;
 
-      toast.success('Project deleted successfully!');
+      toast.success('Proyecto eliminado');
       
       // Clear all states
       setProject(null);
@@ -651,7 +652,7 @@ export default function ProjectPage() {
         .update({ public_share_token: token })
         .eq('id', project.id);
       if (error) {
-        toast.error('Error creating share link.');
+        toast.error('No se pudo crear el enlace para compartir.');
         return;
       }
       setProject({ ...project, public_share_token: token });
@@ -714,7 +715,7 @@ export default function ProjectPage() {
           .eq('id', task.id)
       );
       await Promise.all(updatePromises);
-      toast.success('Task reordered!');
+      toast.success('Tarea reordenada');
 
     } else {
       // Moving to a different column
@@ -767,7 +768,7 @@ export default function ProjectPage() {
         );
 
         await Promise.all([...sourceUpdatePromises, ...finishUpdatePromises]);
-        toast.success('Task moved to new column!');
+        toast.success('Tarea movida');
       } catch (error) {
         console.error("Error moving task:", error);
         toast.error("Failed to move task. Reverting changes.");
@@ -799,44 +800,36 @@ export default function ProjectPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full w-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <PageLoader label="Cargando proyecto" />;
   }
 
   if (!project) {
     return (
-      <div className="flex-1 overflow-auto ">
-        <div className="max-w-7xl h-screen px-4 border border-border sm:px-6 lg:px-8 py-8  mx-4 my-4 rounded-xl shadow-sm bg-white dark:bg-[#0A0A0A]">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold">Project not found</h1>
-            <p className="text-muted-foreground mb-4">
-              The project you&apos;re looking for doesn&apos;t exist or you don&apos;t have access to it.
-            </p>
-            <Button asChild>
-              <Link href="/dashboard">Back to Dashboard</Link>
-            </Button>
-          </div>
-        </div>
-      </div>
+      <EmptyState
+        title="Proyecto no encontrado"
+        description="No existe o no tienes acceso a él."
+        action={
+          <Button asChild size="sm">
+            <Link href="/dashboard">Volver al inicio</Link>
+          </Button>
+        }
+        className="my-10"
+      />
     );
   }
 
   return (
     <div className="">
-      {/* Header */}
+      {/* Cabecera */}
       <div className="mb-8">
-       
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-xl font-semibold">{project.name}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
             {project.description && (
               <p className="text-muted-foreground mt-1">{project.description}</p>
             )}
             <p className="text-sm text-muted-foreground mt-2">
-              Created {new Date(project.created_at).toLocaleDateString()}
+              Creado el {new Date(project.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
             </p>
           </div>
           <div className="flex items-center space-x-2">
@@ -849,23 +842,19 @@ export default function ProjectPage() {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={openRenameProjectDialog}>
                   <Edit className="h-4 w-4 mr-2" />
-                  Rename Project
+                  Renombrar
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleShareProject}>
                   <Share2 className="h-4 w-4 mr-2" />
-                  Share
-                </DropdownMenuItem>
-                <DropdownMenuItem disabled>
-                  <Code className="h-4 w-4 mr-2" />
-                  Embed (soon)
+                  Compartir
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   onClick={openDeleteProjectDialog}
                   className="text-destructive"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Project
+                  Eliminar proyecto
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu> 
@@ -873,14 +862,14 @@ export default function ProjectPage() {
                   <DialogTrigger asChild>
                         <Button size="xs" variant="default" className="text-xs">
                           <Plus className="h-4 w-4" />
-                          Add Column
+                          Añadir columna
                         </Button>
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
-                      <DialogTitle>Create New Column</DialogTitle>
+                      <DialogTitle>Nueva columna</DialogTitle>
                       <DialogDescription>
-                        Add a new column to organize your tasks.
+                        Crea una columna para organizar las tareas.
                       </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleCreateColumn} className="space-y-4">
@@ -889,7 +878,7 @@ export default function ProjectPage() {
                           id="columnName"
                           value={columnName}
                           onChange={(e) => setColumnName(e.target.value)}
-                          placeholder="Enter column name"
+                          placeholder="Nombre de la columna"
                           required
                         />
                       </div>
@@ -897,10 +886,10 @@ export default function ProjectPage() {
                       <div className="flex gap-3 pt-4">
                         <Button type="submit" size="xs" disabled={creating} className="flex-1">
                           {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          Create Column
+                          Crear columna
                         </Button>
                         <Button type="button" variant="outline" size="xs" onClick={() => setColumnDialogOpen(false)}>
-                          Cancel
+                          Cancelar
                         </Button>
                       </div>
                     </form>
@@ -913,14 +902,14 @@ export default function ProjectPage() {
       {/* Main Content with Tabs */}
       <Tabs defaultValue="board" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="board">Board</TabsTrigger>
+          <TabsTrigger value="board">Tablero</TabsTrigger>
           <TabsTrigger value="team">
             <Users className="h-4 w-4 mr-2" />
-            Team
+            Equipo
           </TabsTrigger>
           <TabsTrigger value="activity">
             <Activity className="h-4 w-4 mr-2" />
-            Activity
+            Actividad
           </TabsTrigger>
         </TabsList>
 
@@ -956,17 +945,17 @@ export default function ProjectPage() {
       <Dialog key={editingTask?.id || 'edit-dialog'} open={editTaskDialogOpen} onOpenChange={setEditTaskDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Task</DialogTitle>
+            <DialogTitle>Editar tarea</DialogTitle>
             <DialogDescription>
-              Update the task details.
+              Actualiza los datos de la tarea.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleEditTask} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="editColumn">Column *</Label>
+              <Label htmlFor="editColumn">Columna *</Label>
               <Select value={selectedColumnId} onValueChange={setSelectedColumnId} required>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a column" />
+                  <SelectValue placeholder="Selecciona una columna" />
                 </SelectTrigger>
                 <SelectContent>
                   {columns.map((column) => (
@@ -979,44 +968,44 @@ export default function ProjectPage() {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="editTitle">Task Title *</Label>
+              <Label htmlFor="editTitle">Título *</Label>
               <Input
                 id="editTitle"
                 value={taskTitle}
                 onChange={(e) => setTaskTitle(e.target.value)}
-                placeholder="Enter task title"
+                placeholder="Título de la tarea"
                 required
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="editDescription">Description</Label>
+              <Label htmlFor="editDescription">Descripción</Label>
               <Textarea
                 id="editDescription"
                 value={taskDescription}
                 onChange={(e) => setTaskDescription(e.target.value)}
-                placeholder="Enter task description (optional)"
+                placeholder="Descripción (opcional)"
                 rows={3}
               />
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="editPriority">Priority</Label>
+                <Label htmlFor="editPriority">Prioridad</Label>
                 <Select value={taskPriority} onValueChange={(value: 'low' | 'medium' | 'high') => setTaskPriority(value)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="low">Baja</SelectItem>
+                    <SelectItem value="medium">Media</SelectItem>
+                    <SelectItem value="high">Alta</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="editDueDate">Due Date</Label>
+                <Label htmlFor="editDueDate">Vencimiento</Label>
                 <Input
                   id="editDueDate"
                   type="date"
@@ -1027,16 +1016,16 @@ export default function ProjectPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="editAssignedTo">Assign To</Label>
+              <Label htmlFor="editAssignedTo">Asignar a</Label>
               <Select value={taskAssignedTo || ''} onValueChange={(value) => setTaskAssignedTo(value || undefined)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select team member (optional)" />
+                  <SelectValue placeholder="Miembro del equipo (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  <SelectItem value="unassigned">Sin asignar</SelectItem>
                   {projectMembers.map((member) => (
                     <SelectItem key={member.user_id} value={member.user_id}>
-                      {member.profiles?.full_name || member.profiles?.email || 'Unknown User'}
+                      {member.profiles?.full_name || member.profiles?.email || 'Usuario desconocido'}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1046,10 +1035,10 @@ export default function ProjectPage() {
             <div className="flex gap-3 pt-4">
               <Button type="submit" size="xs" disabled={creating} className="flex-1">
                 {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Update Task
+                Guardar cambios
               </Button>
               <Button type="button" size="xs" variant="outline" onClick={() => setEditTaskDialogOpen(false)}>
-                Cancel
+                Cancelar
               </Button>
             </div>
           </form>
@@ -1060,19 +1049,19 @@ export default function ProjectPage() {
       <Dialog open={editColumnDialogOpen} onOpenChange={setEditColumnDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename Column</DialogTitle>
+            <DialogTitle>Renombrar columna</DialogTitle>
             <DialogDescription>
-              Change the name of this column.
+              Cambia el nombre de la columna.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleEditColumn} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="editColumnName">Column Name *</Label>
+              <Label htmlFor="editColumnName">Nombre de la columna *</Label>
               <Input
                 id="editColumnName"
                 value={columnName}
                 onChange={(e) => setColumnName(e.target.value)}
-                placeholder="Enter column name"
+                placeholder="Nombre de la columna"
                 required
               />
             </div>
@@ -1080,10 +1069,10 @@ export default function ProjectPage() {
             <div className="flex gap-3 pt-4">
               <Button type="submit" disabled={creating} className="flex-1">
                 {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Rename Column
+                Renombrar columna
               </Button>
               <Button type="button" variant="outline" onClick={() => setEditColumnDialogOpen(false)}>
-                Cancel
+                Cancelar
               </Button>
             </div>
           </form>
@@ -1099,7 +1088,7 @@ export default function ProjectPage() {
               {selectedTask?.title}
             </DialogTitle>
             <DialogDescription>
-              Task comments and discussion
+              Comentarios de la tarea
             </DialogDescription>
           </DialogHeader>
           {selectedTask && (
@@ -1115,30 +1104,30 @@ export default function ProjectPage() {
       <Dialog open={projectRenameDialogOpen} onOpenChange={setProjectRenameDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename Project</DialogTitle>
+            <DialogTitle>Renombrar proyecto</DialogTitle>
             <DialogDescription>
-              Update the project name and description.
+              Actualiza el nombre y la descripción.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleRenameProject} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="projectName">Project Name *</Label>
+              <Label htmlFor="projectName">Nombre del proyecto *</Label>
               <Input
                 id="projectName"
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
-                placeholder="Enter project name"
+                placeholder="Nombre del proyecto"
                 required
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="projectDescription">Description</Label>
+              <Label htmlFor="projectDescription">Descripción</Label>
               <Textarea
                 id="projectDescription"
                 value={projectDescription}
                 onChange={(e) => setProjectDescription(e.target.value)}
-                placeholder="Enter project description (optional)"
+                placeholder="Descripción (opcional)"
                 rows={3}
               />
             </div>
@@ -1146,10 +1135,10 @@ export default function ProjectPage() {
             <div className="flex gap-3 pt-4">
               <Button type="submit" size="xs" disabled={creating} className="flex-1">
                 {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Update Project
+                Guardar cambios
               </Button>
               <Button type="button" size="xs" variant="outline" onClick={() => setProjectRenameDialogOpen(false)}>
-                Cancel
+                Cancelar
               </Button>
             </div>
           </form>
@@ -1160,9 +1149,9 @@ export default function ProjectPage() {
       <Dialog open={projectDeleteDialogOpen} onOpenChange={setProjectDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Project</DialogTitle>
+            <DialogTitle>Eliminar proyecto</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this project? This action cannot be undone and will permanently remove all tasks, columns, and team members.
+              ¿Seguro que quieres eliminar este proyecto? Esta acción no se puede deshacer y borrará todas las tareas, columnas y miembros.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-3 pt-4">
@@ -1173,7 +1162,7 @@ export default function ProjectPage() {
               className="flex-1"
             >
               {deletingProject && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Delete Project
+              Eliminar proyecto
             </Button>
             <Button 
               variant="outline" 
@@ -1181,7 +1170,7 @@ export default function ProjectPage() {
               disabled={deletingProject}
               className="flex-1"
             >
-              Cancel
+              Cancelar
             </Button>
           </div>
         </DialogContent>
@@ -1191,17 +1180,17 @@ export default function ProjectPage() {
       <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create New Task</DialogTitle>
+            <DialogTitle>Nueva tarea</DialogTitle>
             <DialogDescription>
-              Add a new task to your project board.
+              Añade una tarea al tablero.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateTask} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="column">Column *</Label>
+              <Label htmlFor="column">Columna *</Label>
               <Select value={selectedColumnId} onValueChange={setSelectedColumnId} required>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a column" />
+                  <SelectValue placeholder="Selecciona una columna" />
                 </SelectTrigger>
                 <SelectContent>
                   {columns.map((column) => (
@@ -1214,44 +1203,44 @@ export default function ProjectPage() {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="title">Task Title *</Label>
+              <Label htmlFor="title">Título *</Label>
               <Input
                 id="title"
                 value={taskTitle}
                 onChange={(e) => setTaskTitle(e.target.value)}
-                placeholder="Enter task title"
+                placeholder="Título de la tarea"
                 required
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">Descripción</Label>
               <Textarea
                 id="description"
                 value={taskDescription}
                 onChange={(e) => setTaskDescription(e.target.value)}
-                placeholder="Enter task description (optional)"
+                placeholder="Descripción (opcional)"
                 rows={3}
               />
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="priority">Priority</Label>
+                <Label htmlFor="priority">Prioridad</Label>
                 <Select value={taskPriority} onValueChange={(value: 'low' | 'medium' | 'high') => setTaskPriority(value)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="low">Baja</SelectItem>
+                    <SelectItem value="medium">Media</SelectItem>
+                    <SelectItem value="high">Alta</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="dueDate">Due Date</Label>
+                <Label htmlFor="dueDate">Vencimiento</Label>
                 <Input
                   id="dueDate"
                   type="date"
@@ -1262,16 +1251,16 @@ export default function ProjectPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="assignedTo">Assign To</Label>
+              <Label htmlFor="assignedTo">Asignar a</Label>
               <Select value={taskAssignedTo || ''} onValueChange={(value) => setTaskAssignedTo(value || undefined)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select team member (optional)" />
+                  <SelectValue placeholder="Miembro del equipo (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  <SelectItem value="unassigned">Sin asignar</SelectItem>
                   {projectMembers.map((member) => (
                     <SelectItem key={member.user_id} value={member.user_id}>
-                      {member.profiles?.full_name || member.profiles?.email || 'Bilinmeyen Kullanıcı'}
+                      {member.profiles?.full_name || member.profiles?.email || 'Usuario desconocido'}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1281,10 +1270,10 @@ export default function ProjectPage() {
             <div className="flex gap-3 pt-4">
               <Button type="submit" size="xs" disabled={creating} className="flex-1">
                 {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Create Task
+                Crear tarea
               </Button>
               <Button type="button" variant="outline" size="xs" onClick={() => setTaskDialogOpen(false)}>
-                Cancel
+                Cancelar
               </Button>
             </div>
           </form>
@@ -1302,7 +1291,7 @@ You can share this link with everyone to see your board.
           </DialogHeader>
           <div className="flex items-center gap-2 mt-4">
             <Input value={shareUrl} readOnly className="flex-1" />
-            <Button type="button" onClick={() => {navigator.clipboard.writeText(shareUrl); toast.success('Link copied!')}}>
+            <Button type="button" onClick={() => {navigator.clipboard.writeText(shareUrl); toast.success('Enlace copiado')}}>
               Copy
             </Button>
           </div>
