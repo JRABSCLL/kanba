@@ -21,12 +21,12 @@
 - La edición ahora es un **modal** (Dialog), sin el salto de scroll al tope.
 - La **card** del Kanban muestra ahora **estado de flujo** y **prioridad**
   (badges con color) e icono de **link** si hay entregable cargado.
+- **Cambio rápido de estado** desde la card (el badge de estado es un menú) y
+  desde la tabla (select en línea).
+- **Eliminar** entregable (solo admins) con confirmación, desde el modal.
+- **Tabla potente**: búsqueda + filtros (etapa, estado, prioridad) + orden por
+  columna + columna de Estado + cambio de etapa/estado en línea.
 - "Quick Launch" → "Lanzamiento rápido".
-
-### Pendiente en Agencias (propuesto, no hecho)
-- (c) Cambio rápido de estado desde la card.
-- (d) Eliminar/Cancelar explícito con confirmación.
-- (e) Tabla potente: búsqueda + filtros + orden + cambio de etapa en línea.
 
 ---
 
