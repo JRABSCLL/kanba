@@ -39,14 +39,16 @@ import {
 } from '@/components/ui/tabs';
 import { TeamManagement } from '@/components/team-management';
 import { EmptyState, PageLoader } from '@/components/ui/states';
+import { ViewToggle } from '@/components/ui/view-toggle';
+import { TaskList } from '@/components/task-list';
 import { TaskComments } from '@/components/task-comments';
 import { ActivityFeed } from '@/components/activity-feed';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/components/user-provider';
 import { toast } from 'sonner';
 import { 
-  ArrowLeft, 
-  Plus, 
+  ArrowLeft,
+  Plus,
   MoreHorizontal,
   Calendar,
   Flag,
@@ -58,7 +60,9 @@ import {
   Users,
   Activity,
   Code,
-  Share2
+  Share2,
+  LayoutGrid,
+  List as ListIcon
 } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -97,6 +101,17 @@ export default function ProjectPage() {
   const [deletingProject, setDeletingProject] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
+  const [boardView, setBoardView] = useState<'board' | 'list'>('board');
+
+  // Recordar la vista preferida (tablero/lista) entre sesiones.
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? window.localStorage.getItem('projectBoardView') : null;
+    if (saved === 'board' || saved === 'list') setBoardView(saved);
+  }, []);
+  const changeBoardView = (v: 'board' | 'list') => {
+    setBoardView(v);
+    if (typeof window !== 'undefined') window.localStorage.setItem('projectBoardView', v);
+  };
   
   // Task form state - FIXED: Use undefined instead of empty string for assigned_to
   const [taskTitle, setTaskTitle] = useState('');
@@ -771,10 +786,49 @@ export default function ProjectPage() {
         toast.success('Tarea movida');
       } catch (error) {
         console.error("Error moving task:", error);
-        toast.error("Failed to move task. Reverting changes.");
+        toast.error("No se pudo mover la tarea. Revirtiendo cambios.");
         // Revert UI on error
         await loadProject();
       }
+    }
+  };
+
+  // Mueve una tarea al final de otra columna desde la vista Lista (Select en línea).
+  // Reutiliza el mismo patrón optimista que el drag del Kanban.
+  const handleMoveTaskToColumn = async (taskId: string, newColumnId: string) => {
+    const sourceColumn = columns.find(col => col.tasks.some(t => t.id === taskId));
+    if (!sourceColumn || sourceColumn.id === newColumnId) return;
+    const targetColumn = columns.find(col => col.id === newColumnId);
+    if (!targetColumn) return;
+
+    const movedTask = sourceColumn.tasks.find(t => t.id === taskId)!;
+    const newSourceTasks = sourceColumn.tasks.filter(t => t.id !== taskId);
+    const newTargetTasks = [...targetColumn.tasks, movedTask];
+    const newPosition = newTargetTasks.length - 1;
+
+    setColumns(prev =>
+      prev.map(col => {
+        if (col.id === sourceColumn.id) return { ...col, tasks: newSourceTasks };
+        if (col.id === targetColumn.id) return { ...col, tasks: newTargetTasks };
+        return col;
+      })
+    );
+
+    try {
+      await supabase
+        .from('tasks')
+        .update({ column_id: newColumnId, position: newPosition, updated_by: user!.id })
+        .eq('id', taskId);
+      await Promise.all(
+        newSourceTasks.map((task, index) =>
+          supabase.from('tasks').update({ position: index, updated_by: user!.id }).eq('id', task.id)
+        )
+      );
+      toast.success('Tarea movida');
+    } catch (error) {
+      console.error('Error moving task:', error);
+      toast.error('No se pudo mover la tarea. Revirtiendo cambios.');
+      await loadProject();
     }
   };
 
@@ -913,19 +967,42 @@ export default function ProjectPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="board" className="space-y-6">
-          <KanbanBoard
-            columns={columns}
-            projectMembers={projectMembers}
-            handleDragEnd={handleDragEnd}
-            onEditColumn={openEditColumnDialog}
-            onDeleteColumn={handleDeleteColumn}
-            onAddTask={openTaskDialog}
-            onEditTask={openEditTaskDialog}
-            onDeleteTask={handleDeleteTask}
-            onViewComments={openCommentsDialog}
-            onToggleDone={handleToggleDone}
-          />
+        <TabsContent value="board" className="space-y-4">
+          <div className="flex justify-end">
+            <ViewToggle
+              value={boardView}
+              onChange={changeBoardView}
+              options={[
+                { value: 'board', label: 'Tablero', icon: LayoutGrid },
+                { value: 'list', label: 'Lista', icon: ListIcon },
+              ]}
+            />
+          </div>
+
+          {boardView === 'board' ? (
+            <KanbanBoard
+              columns={columns}
+              projectMembers={projectMembers}
+              handleDragEnd={handleDragEnd}
+              onEditColumn={openEditColumnDialog}
+              onDeleteColumn={handleDeleteColumn}
+              onAddTask={openTaskDialog}
+              onEditTask={openEditTaskDialog}
+              onDeleteTask={handleDeleteTask}
+              onViewComments={openCommentsDialog}
+              onToggleDone={handleToggleDone}
+            />
+          ) : (
+            <TaskList
+              columns={columns}
+              projectMembers={projectMembers}
+              onEditTask={openEditTaskDialog}
+              onDeleteTask={handleDeleteTask}
+              onViewComments={openCommentsDialog}
+              onToggleDone={handleToggleDone}
+              onMoveTask={handleMoveTaskToColumn}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="team">

@@ -6,6 +6,7 @@ import dynamic from "next/dynamic"
 import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DroppableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd"
 import { supabase } from "@/lib/supabase"
 import { useUser } from "@/components/user-provider"
+import { ViewToggle } from "@/components/ui/view-toggle"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -1053,10 +1054,14 @@ export function AgencyProductionModule() {
       {/* Plan view tabs */}
       {activeView === "plan" && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
-          <div className="flex gap-2">
-            <ViewButton active={planViewMode === "kanban"} onClick={() => setPlanViewMode("kanban")} label="Kanban" />
-            <ViewButton active={planViewMode === "table"} onClick={() => setPlanViewMode("table")} label="Tabla" />
-          </div>
+          <ViewToggle
+            value={planViewMode}
+            onChange={setPlanViewMode}
+            options={[
+              { value: "kanban", label: "Kanban" },
+              { value: "table", label: "Tabla" },
+            ]}
+          />
           {canManageProduction && (
             <Button variant="outline" size="sm" onClick={() => setStagesManagerOpen(true)}>
               <Settings2 className="h-4 w-4 mr-2" />
@@ -1592,7 +1597,7 @@ function PlanTableView({ stages, deliverables, brandById, onEdit, updatingId, ca
                         <span className="text-muted-foreground">Sin etapa</span>
                       )}
                     </td>
-                    <td className="py-3 pr-4 capitalize">{d.priority}</td>
+                    <td className="py-3 pr-4">{d.priority === "high" ? "Alta" : d.priority === "medium" ? "Media" : d.priority === "low" ? "Baja" : d.priority}</td>
                     <td className="py-3 pr-4">
                       <span className={isOverdue(d) ? "font-medium text-red-600" : ""}>{d.due_date || "—"}</span>
                     </td>
