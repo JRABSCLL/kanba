@@ -57,7 +57,7 @@ export default function RootLayout({
         <link rel="manifest" href="/web-app-manifest-512x512.png" />
       </head>
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} themes={['light', 'dark', 'sepia']}>
           <QueryProvider>
             <UserProvider>
               {children}

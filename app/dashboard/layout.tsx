@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from "react"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
+import { ThemeSwitcher } from "@/components/theme-switcher"
 import { useUser } from "@/components/user-provider"
 import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
@@ -113,8 +114,11 @@ export default function DashboardLayout({
       <div className="flex w-full min-h-screen">
         <AppSidebar onSignOut={handleSignOut} onProjectUpdate={handleProjectUpdate} />
         <main className="flex-1 p-2 flex justify-center items-start overflow-auto">
-          <div className="w-full border border-border shadow-sm dark:shadow:sm rounded-xl h-full px-4 py-4 bg-white dark:bg-[#0A0A0A]">
-            <SidebarTrigger />
+          <div className="w-full border border-border shadow-sm dark:shadow:sm rounded-xl h-full px-4 py-4 bg-card">
+            <div className="mb-2 flex items-center justify-between">
+              <SidebarTrigger />
+              <ThemeSwitcher />
+            </div>
             {children}
           </div>
         </main>

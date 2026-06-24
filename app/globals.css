@@ -74,6 +74,42 @@
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
+  /* Tercer tema: Sepia / Lectura — tonos cálidos crema, menos fatiga visual. */
+  .sepia {
+    --background: 39 46% 91%;
+    --foreground: 30 25% 18%;
+    --card: 40 52% 95%;
+    --card-foreground: 30 25% 18%;
+    --popover: 40 52% 95%;
+    --popover-foreground: 30 25% 18%;
+    --primary: 30 30% 22%;
+    --primary-foreground: 40 50% 96%;
+    --secondary: 38 34% 85%;
+    --secondary-foreground: 30 25% 22%;
+    --muted: 38 34% 86%;
+    --muted-foreground: 32 18% 38%;
+    --accent: 38 34% 85%;
+    --accent-foreground: 30 25% 22%;
+    --destructive: 0 65% 45%;
+    --destructive-foreground: 40 50% 96%;
+    --border: 36 26% 79%;
+    --input: 36 26% 79%;
+    --ring: 30 30% 30%;
+    --chart-1: 25 70% 45%;
+    --chart-2: 40 55% 45%;
+    --chart-3: 15 60% 40%;
+    --chart-4: 55 45% 45%;
+    --chart-5: 5 60% 50%;
+    --sidebar-background: 39 44% 88%;
+    --sidebar-foreground: 30 22% 26%;
+    --sidebar-primary: 30 30% 22%;
+    --sidebar-primary-foreground: 40 50% 96%;
+    --sidebar-accent: 38 34% 83%;
+    --sidebar-accent-foreground: 30 25% 22%;
+    --sidebar-border: 36 26% 79%;
+    --sidebar-ring: 30 30% 30%;
+  }
+
   .theme {
     --animate-shine: shine var(--duration) infinite linear;
     --animate-shiny-text: shiny-text 8s infinite;

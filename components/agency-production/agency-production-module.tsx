@@ -169,6 +169,24 @@ const FLOW_STATUSES = [
   { value: "cancelled", label: "Cancelado" },
 ] as const
 
+const FLOW_STATUS_LABEL: Record<string, string> = Object.fromEntries(FLOW_STATUSES.map((s) => [s.value, s.label]))
+
+function priorityMeta(priority: string) {
+  if (priority === "high") return { label: "Alta", cls: "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300" }
+  if (priority === "medium") return { label: "Media", cls: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300" }
+  if (priority === "low") return { label: "Baja", cls: "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300" }
+  return { label: priority, cls: "bg-muted text-muted-foreground" }
+}
+
+function statusMeta(status: string) {
+  const label = FLOW_STATUS_LABEL[status] ?? status
+  let cls = "bg-muted text-muted-foreground"
+  if (status === "approved" || status === "published") cls = "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300"
+  else if (status === "in_review" || status === "changes_requested") cls = "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+  else if (status === "cancelled" || status === "paused") cls = "bg-muted text-muted-foreground"
+  return { label, cls }
+}
+
 const DEFAULT_TYPES = ["Video", "Arte", "Copy", "Parrilla", "Story", "Reel", "Reporte", "Banner", "Guion", "Idea"]
 
 const todayIso = () => new Date().toISOString().slice(0, 10)
@@ -889,7 +907,6 @@ export function AgencyProductionModule() {
       external_url: deliverable.external_url || "",
       notes: deliverable.notes || "",
     })
-    window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   async function saveDeliverableEdit(event: FormEvent) {
@@ -1052,16 +1069,23 @@ export function AgencyProductionModule() {
         </div>
       )}
 
-      {/* Edit panel */}
-      {editingDeliverable && deliverableForm && (
-        <EditDeliverablePanel
-          form={deliverableForm}
-          setForm={setDeliverableForm}
-          onSubmit={saveDeliverableEdit}
-          onCancel={() => { setEditingDeliverable(null); setDeliverableForm(null) }}
-          saving={updatingDeliverableId === editingDeliverable.id}
-        />
-      )}
+      {/* Edit dialog (modal — sin salto de scroll) */}
+      <Dialog
+        open={!!editingDeliverable && !!deliverableForm}
+        onOpenChange={(open) => { if (!open) { setEditingDeliverable(null); setDeliverableForm(null) } }}
+      >
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {deliverableForm && (
+            <EditDeliverablePanel
+              form={deliverableForm}
+              setForm={setDeliverableForm}
+              onSubmit={saveDeliverableEdit}
+              onCancel={() => { setEditingDeliverable(null); setDeliverableForm(null) }}
+              saving={updatingDeliverableId === editingDeliverable?.id}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* View tabs - only on dashboard */}
       {activeView === "dashboard" && (
@@ -1073,7 +1097,7 @@ export function AgencyProductionModule() {
           {canManageProduction && agencies.length > 0 && (
             <Button size="sm" onClick={() => setQuickLaunchOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Quick Launch
+              Lanzamiento rápido
             </Button>
           )}
         </div>
@@ -1573,15 +1597,30 @@ function DeliverableCardContent({ deliverable, onEdit, updating, canManage }: { 
         )}
       </div>
       <div className="mt-2 flex flex-wrap gap-1">
+        <Badge className={`text-xs ${statusMeta(deliverable.status).cls}`}>{statusMeta(deliverable.status).label}</Badge>
+        <Badge className={`text-xs ${priorityMeta(deliverable.priority).cls}`}>{priorityMeta(deliverable.priority).label}</Badge>
         <Badge variant="secondary" className="text-xs">{deliverable.deliverable_type}</Badge>
         {deliverable.channel && <Badge variant="outline" className="text-xs">{deliverable.channel}</Badge>}
         {isOverdue(deliverable) && <Badge className="bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 text-xs">Atrasado</Badge>}
       </div>
-      {deliverable.due_date && (
-        <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-          <CalendarDays className="h-3 w-3" /> {deliverable.due_date}
-        </div>
-      )}
+      <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        {deliverable.due_date ? (
+          <div className="flex items-center gap-1">
+            <CalendarDays className="h-3 w-3" /> {deliverable.due_date}
+          </div>
+        ) : <span />}
+        {deliverable.external_url && (
+          <a
+            href={deliverable.external_url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1 hover:text-foreground"
+          >
+            <ExternalLink className="h-3 w-3" /> Link
+          </a>
+        )}
+      </div>
     </>
   )
 }
@@ -1934,7 +1973,7 @@ function SetupView(props: any) {
 }
 
 function EditDeliverablePanel({ form, setForm, onSubmit, onCancel, saving }: { form: DeliverableForm; setForm: (form: DeliverableForm) => void; onSubmit: (event: FormEvent) => void; onCancel: () => void; saving: boolean }) {
-  return <Card className="border-primary/30"><CardHeader><div className="flex items-start justify-between gap-2"><div><CardTitle>Editar entregable</CardTitle><CardDescription>Actualiza nombre, fecha, link externo, notas y estado.</CardDescription></div><Button type="button" variant="ghost" size="sm" onClick={onCancel}><X className="h-4 w-4" /></Button></div></CardHeader><CardContent><form onSubmit={onSubmit} className="grid gap-3 md:grid-cols-3"><Field label="Título" className="md:col-span-2"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field><Field label="Tipo"><Input value={form.deliverable_type} onChange={(e) => setForm({ ...form, deliverable_type: e.target.value })} required /></Field><Field label="Estado"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{FLOW_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select></Field><Field label="Prioridad"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}><option value="low">Baja</option><option value="medium">Media</option><option value="high">Alta</option></select></Field><Field label="Fecha límite"><Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} /></Field><Field label="Canal"><Input value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })} /></Field><Field label="Formato"><Input value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })} /></Field><Field label="Link externo"><Input value={form.external_url} onChange={(e) => setForm({ ...form, external_url: e.target.value })} placeholder="https://..." /></Field><Field label="Descripción" className="md:col-span-3"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field><Field label="Notas" className="md:col-span-3"><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field><div className="flex gap-2 md:col-span-3"><Button type="submit" disabled={saving}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Guardar</Button><Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button></div></form></CardContent></Card>
+  return <><DialogHeader><DialogTitle>Editar entregable</DialogTitle><DialogDescription>Actualiza nombre, estado, prioridad, fecha, link y notas.</DialogDescription></DialogHeader><form onSubmit={onSubmit} className="grid gap-3 md:grid-cols-3 pt-2"><Field label="Título" className="md:col-span-2"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field><Field label="Tipo"><Input value={form.deliverable_type} onChange={(e) => setForm({ ...form, deliverable_type: e.target.value })} required /></Field><Field label="Estado"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{FLOW_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select></Field><Field label="Prioridad"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}><option value="low">Baja</option><option value="medium">Media</option><option value="high">Alta</option></select></Field><Field label="Fecha límite"><Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} /></Field><Field label="Canal"><Input value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })} /></Field><Field label="Formato"><Input value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })} /></Field><Field label="Link externo"><Input value={form.external_url} onChange={(e) => setForm({ ...form, external_url: e.target.value })} placeholder="https://..." /></Field><Field label="Descripción" className="md:col-span-3"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field><Field label="Notas" className="md:col-span-3"><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field><div className="flex gap-2 md:col-span-3"><Button type="submit" disabled={saving}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Guardar</Button><Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button></div></form></>
 }
 
 function PermissionCard() {
