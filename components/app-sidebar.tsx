@@ -299,8 +299,8 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
               </div>
             </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-              {theme === 'dark' ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
+            <DropdownMenuItem onClick={() => setTheme(theme === 'light' ? 'dark' : theme === 'dark' ? 'sepia' : 'light')}>
+              {theme === 'dark' ? <Sun className="h-4 w-4 mr-2" /> : theme === 'sepia' ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
               Cambiar tema
             </DropdownMenuItem>
             <DropdownMenuSeparator />

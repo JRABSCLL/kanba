@@ -1,7 +1,32 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-06-24  
-**Versión actual:** v0.11.0 — Deploy, permisos reales, UI/UX y data layer
+**Versión actual:** v0.12.0 — Temas (light/dark/sepia) y edición de entregables
+
+---
+
+## Cambios v0.12.0 (temas + edición de agencias)
+
+### Temas
+- Tres temas: **light (default)**, dark y **sepia** (modo lectura cálido).
+  `ThemeProvider` con `themes={['light','dark','sepia']}`, `defaultTheme="light"`,
+  `enableSystem={false}`. Paleta sepia en `app/globals.css` (`.sepia`).
+- Conmutador discreto **fuera de Configuración**: `components/theme-switcher.tsx`
+  en la barra superior del dashboard (`app/dashboard/layout.tsx`). El toggle del
+  sidebar ahora cicla los tres temas.
+- El contenedor del dashboard pasó de `bg-white` fijo a `bg-card` para respetar
+  el tema (incl. sepia).
+
+### Producción de Agencias — edición de entregables
+- La edición ahora es un **modal** (Dialog), sin el salto de scroll al tope.
+- La **card** del Kanban muestra ahora **estado de flujo** y **prioridad**
+  (badges con color) e icono de **link** si hay entregable cargado.
+- **Cambio rápido de estado** desde la card (el badge de estado es un menú) y
+  desde la tabla (select en línea).
+- **Eliminar** entregable (solo admins) con confirmación, desde el modal.
+- **Tabla potente**: búsqueda + filtros (etapa, estado, prioridad) + orden por
+  columna + columna de Estado + cambio de etapa/estado en línea.
+- "Quick Launch" → "Lanzamiento rápido".
 
 ---
 
