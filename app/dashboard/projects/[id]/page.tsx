@@ -1,7 +1,8 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -130,15 +131,28 @@ export default function ProjectPage() {
   const router = useRouter();
   const params = useParams();
   const projectId = params?.id as string;
+  const queryClient = useQueryClient();
 
-
-  useEffect(() => {
-    if (!user) {
-      router.push('/login');
-      return;
+  // Siembra instantánea desde la caché: si ya visitaste este proyecto, se pinta
+  // al momento (sin spinner) antes del primer paint. loadProject revalida luego.
+  useLayoutEffect(() => {
+    const cached = queryClient.getQueryData<{ project: Project; columns: Column[]; members: ProjectMember[] }>(['project', projectId]);
+    if (cached) {
+      setProject(cached.project);
+      setColumns(cached.columns);
+      setProjectMembers(cached.members);
+      setLoading(false);
     }
-    checkUser();
-  }, [user, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  // Carga / revalidación en segundo plano. El perfil ya viene del contexto, no
+  // se re-pide. El layout se encarga del redirect si no hay usuario.
+  useEffect(() => {
+    if (!user) return;
+    loadProject().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, projectId]);
 
   // Prevent page reload after project deletion
   useEffect(() => {
@@ -146,28 +160,6 @@ export default function ProjectPage() {
       router.push('/dashboard');
     }
   }, [project, loading, router]);
-
-  const checkUser = async () => {
-    if (!user) return;
-    
-    try {
-      // Get user profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      
-      setProfile(profile);
-      
-      await loadProject();
-    } catch (error) {
-      console.error('Error:', error);
-      toast.error('No se pudo cargar el proyecto');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadProject = async () => {
     try {
@@ -183,7 +175,7 @@ export default function ProjectPage() {
 
       // Load project members — pasamos project.id EXPLÍCITAMENTE para evitar
       // la race condition donde el state 'project' aún es null en el closure.
-      await loadProjectMembers(project.id);
+      const members = await loadProjectMembers(project.id);
 
       // Get columns with tasks
       const { data: columns, error: columnsError } = await supabase
@@ -221,6 +213,13 @@ export default function ProjectPage() {
       );
 
       setColumns(columnsWithTasks);
+
+      // Guardamos el bundle en caché para que la próxima visita sea instantánea.
+      queryClient.setQueryData(['project', projectId], {
+        project,
+        columns: columnsWithTasks,
+        members: members ?? [],
+      });
     } catch (error: any) {
       console.error('Error loading project:', error);
       toast.error('No se pudo cargar el proyecto');
@@ -228,13 +227,13 @@ export default function ProjectPage() {
     }
   };
 
-  const loadProjectMembers = async (projectIdArg?: string) => {
+  const loadProjectMembers = async (projectIdArg?: string): Promise<ProjectMember[]> => {
     // Aceptamos projectId como argumento para evitar la race condition con el
     // state 'project'. Si no se pasa, caemos al state (útil en recargas posteriores).
     const pid = projectIdArg ?? project?.id;
     if (!pid) {
       console.log("[v0] loadProjectMembers: no project id available, skipping");
-      return;
+      return [];
     }
 
     try {
@@ -254,8 +253,10 @@ export default function ProjectPage() {
       if (error) throw error;
       console.log("[v0] loadProjectMembers: loaded", members?.length ?? 0, "members for project", pid);
       setProjectMembers(members || []);
+      return (members || []) as ProjectMember[];
     } catch (error: any) {
       console.error('[v0] Error loading project members:', error);
+      return [];
     }
   };
 

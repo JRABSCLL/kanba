@@ -4,7 +4,8 @@
 
 
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -50,114 +51,58 @@ interface TaskAssignment {
 }
 
 export default function DashboardPage() {
-  const { user, signOut } = useUser();
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [assignedTasks, setAssignedTasks] = useState<TaskAssignment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useUser();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
 
+  // El rol ya viene del contexto (UserProvider); no re-pedimos el perfil.
+  const isAdmin = user?.role === 'admin' && user?.is_active === true;
 
-  useEffect(() => {
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-    checkUser();
-  }, [user, router]);
-
-  const checkUser = async () => {
-    if (!user) return;
-    
-    try {
-      // Get user profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      
-      setProfile(profile);
-
-      // Admins ven TODOS los proyectos de la organización; los miembros solo
-      // aquellos donde están en project_members. El `!inner` restringe a los
-      // proyectos con membresía, así que para admin usamos un left join.
-      const isAdmin = profile?.role === 'admin' && profile?.is_active === true;
+  // Carga cacheada (stale-while-revalidate). Al volver al panel se muestra al
+  // instante desde caché y revalida en segundo plano.
+  const { data, isLoading } = useQuery({
+    queryKey: ['dashboard', user?.id, isAdmin],
+    enabled: !!user,
+    queryFn: async () => {
+      // Admins ven TODOS los proyectos; los miembros solo donde son project_members.
       const projectsQuery = isAdmin
         ? supabase.from('projects').select('*, project_members(role)')
         : supabase.from('projects').select('*, project_members!inner(role)');
-
       const { data: projects } = await projectsQuery.order('created_at', { ascending: false });
 
-      setProjects(projects || []);
-
-      // Get tasks assigned to the user
+      // Tareas asignadas en UNA sola query con joins anidados (antes era N+1).
       const { data: tasks } = await supabase
         .from('tasks')
-        .select(`
-          id,
-          title,
-          priority,
-          due_date,
-          column_id
-        `)
-        .eq('assigned_to', user.id)
+        .select('id, title, priority, due_date, columns(name, projects(id, name, slug))')
+        .eq('assigned_to', user!.id)
         .order('created_at', { ascending: false })
         .limit(10);
 
-      if (tasks) {
-        // Get column and project info for each task
-        const formattedTasks = await Promise.all(
-          tasks.map(async (task: any) => {
-            // Get column info
-            const { data: column } = await supabase
-              .from('columns')
-              .select(`
-                name,
-                project_id
-              `)
-              .eq('id', task.column_id)
-              .single();
+      const assignedTasks: TaskAssignment[] = (tasks || []).map((t: any) => {
+        // Los embeds to-one de Supabase pueden venir como objeto o array; normalizamos.
+        const column = Array.isArray(t.columns) ? t.columns[0] : t.columns;
+        const project = Array.isArray(column?.projects) ? column?.projects[0] : column?.projects;
+        return {
+          id: t.id,
+          title: t.title,
+          priority: t.priority,
+          due_date: t.due_date,
+          project_name: project?.name || 'Proyecto desconocido',
+          project_id: project?.id || '',
+          project_slug: project?.slug || '',
+          column_name: column?.name || '',
+        };
+      });
 
-            // Get project info
-            const { data: project } = await supabase
-              .from('projects')
-              .select('id, name, slug')
-              .eq('id', column?.project_id)
-              .single();
+      return { projects: (projects || []) as Project[], assignedTasks };
+    },
+  });
 
-            return {
-              id: task.id,
-              title: task.title,
-              priority: task.priority,
-              due_date: task.due_date,
-              project_name: project?.name || 'Unknown Project',
-              project_id: project?.id || '',
-              project_slug: project?.slug || '',
-              column_name: column?.name || 'Unknown Column',
-            };
-          })
-        );
-        setAssignedTasks(formattedTasks);
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      toast.error('No se pudo cargar el panel');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const projects = data?.projects ?? [];
+  const assignedTasks = data?.assignedTasks ?? [];
+  const showSkeleton = isLoading && !data;
 
-  const handleSignOut = async () => {
-    await signOut();
-    router.push('/');
-  };
-
-  const canCreateProject = () => {
-    // OrganizAPP: sin límites de plan para uso organizacional interno
-    return !!profile;
-  };
+  const canCreateProject = () => !!user;
 
   const getProjectRole = (project: Project) => {
     if (project.user_id === user?.id) return 'owner';
@@ -203,17 +148,13 @@ export default function DashboardPage() {
     }
   };
 
-  if (loading) {
-    return <PageLoader label="Cargando panel" />;
-  }
-
   return (
     <div className="mx-auto w-full max-w-6xl">
       {/* Cabecera */}
       <header className="mb-8 flex items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Inicio</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{profile?.full_name || user?.email}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{user?.full_name || user?.email}</p>
         </div>
         <Button
           size="sm"
@@ -237,7 +178,7 @@ export default function DashboardPage() {
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{kpi.label}</span>
               <kpi.icon className="h-4 w-4 text-muted-foreground/50" strokeWidth={1.75} />
             </div>
-            <div className="mt-2 text-3xl font-semibold tabular-nums tracking-tight">{kpi.value}</div>
+            <div className="mt-2 text-3xl font-semibold tabular-nums tracking-tight">{showSkeleton ? <span className="text-muted-foreground/40">—</span> : kpi.value}</div>
           </div>
         ))}
       </div>
@@ -247,7 +188,13 @@ export default function DashboardPage() {
         <section className="lg:col-span-2">
           <h2 className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Proyectos</h2>
 
-          {projects.length === 0 ? (
+          {showSkeleton ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="h-[104px] animate-pulse rounded-lg border bg-muted/40" />
+              ))}
+            </div>
+          ) : projects.length === 0 ? (
             <EmptyState
               icon={FolderOpen}
               title="No hay proyectos"
@@ -292,7 +239,13 @@ export default function DashboardPage() {
         <aside>
           <h2 className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tareas asignadas</h2>
 
-          {assignedTasks.length === 0 ? (
+          {showSkeleton ? (
+            <div className="space-y-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-[92px] animate-pulse rounded-lg border bg-muted/40" />
+              ))}
+            </div>
+          ) : assignedTasks.length === 0 ? (
             <EmptyState icon={CheckSquare} title="Sin tareas asignadas" />
           ) : (
             <div className="space-y-3">

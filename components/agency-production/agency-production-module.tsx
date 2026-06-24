@@ -1,8 +1,9 @@
 "use client"
 
-import { FormEvent, ReactNode, useEffect, useMemo, useState, useCallback } from "react"
+import { FormEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useState, useCallback } from "react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
+import { useQueryClient } from "@tanstack/react-query"
 import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DroppableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd"
 import { supabase } from "@/lib/supabase"
 import { useUser } from "@/components/user-provider"
@@ -245,7 +246,8 @@ function buildTitle(item: PlanItemDraft, index: number) {
 
 export function AgencyProductionModule() {
   const { user, loading: userLoading } = useUser()
-  
+  const queryClient = useQueryClient()
+
   // Permission helpers
   const isAdmin = user?.role === "admin" && user?.is_active === true
   const isInternal = user?.user_type === "internal" && user?.is_active === true
@@ -372,6 +374,23 @@ export function AgencyProductionModule() {
     })
   }, [agencies, deliverables])
 
+  // Siembra instantánea desde caché: al reentrar al módulo se pinta al momento
+  // (sin el spinner de "Cargando producción...") y revalida en segundo plano.
+  useLayoutEffect(() => {
+    const cached = queryClient.getQueryData<any>(["agency-module", user?.id])
+    if (cached) {
+      setAgencies(cached.agencies)
+      setBrands(cached.brands)
+      setPlans(cached.plans)
+      setPlanItems(cached.planItems)
+      setDeliverables(cached.deliverables)
+      setPlanStages(cached.planStages)
+      setStageTemplates(cached.stageTemplates)
+      setLoading(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
+
   useEffect(() => {
     if (!userLoading && user) loadModule()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -450,13 +469,29 @@ export function AgencyProductionModule() {
       }
       // Internal and Admin see all
 
+      const brandsData = (brandsRes.data || []) as Brand[]
+      const planItemsData = (planItemsRes.data || []) as PlanItem[]
+      const planStagesData = (stagesRes.data || []) as PlanStage[]
+      const stageTemplatesData = (templatesRes.data || []) as StageTemplate[]
+
       setAgencies(agenciesData)
-      setBrands((brandsRes.data || []) as Brand[])
+      setBrands(brandsData)
       setPlans(plansData)
-      setPlanItems((planItemsRes.data || []) as PlanItem[])
+      setPlanItems(planItemsData)
       setDeliverables(deliverablesData)
-      setPlanStages((stagesRes.data || []) as PlanStage[])
-      setStageTemplates((templatesRes.data || []) as StageTemplate[])
+      setPlanStages(planStagesData)
+      setStageTemplates(stageTemplatesData)
+
+      // Cacheamos el bundle para que la próxima entrada al módulo sea instantánea.
+      queryClient.setQueryData(["agency-module", user?.id], {
+        agencies: agenciesData,
+        brands: brandsData,
+        plans: plansData,
+        planItems: planItemsData,
+        deliverables: deliverablesData,
+        planStages: planStagesData,
+        stageTemplates: stageTemplatesData,
+      })
     } catch (error: any) {
       setSchemaError(error?.message || "No se pudo cargar el módulo de agencias")
     } finally {

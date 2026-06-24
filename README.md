@@ -2,7 +2,7 @@
 
 Internal project management and production control system for managing your organization's projects and external agency work.
 
-**Tech Stack:** Next.js 13.5.1, React 18, Supabase, TypeScript, Tailwind CSS, shadcn/ui, @hello-pangea/dnd
+**Tech Stack:** Next.js 13.5.1, React 18, Supabase, TypeScript, Tailwind CSS, shadcn/ui, @hello-pangea/dnd, TanStack Query
 
 ## Features
 
@@ -11,6 +11,8 @@ Internal project management and production control system for managing your orga
 - **User Management** — Admin controls for activation, roles, and permissions (`is_active` + `role`)
 - **Real-time Sync** — Supabase row-level security (RLS) ensures members see only their projects/agencies
 - **Drag & Drop Kanban** — Move items between workflow stages with @hello-pangea/dnd
+- **Kanban + List/Table views** — Both Projects and Agency Production offer two equivalent views (board with drag, and a filterable/sortable list/table)
+- **Instant navigation** — TanStack Query caches data (stale-while-revalidate); revisited views render instantly. See [docs/data-layer-and-performance.md](docs/data-layer-and-performance.md)
 - **Dark/Light Mode** — Full theme support
 
 ## Getting Started

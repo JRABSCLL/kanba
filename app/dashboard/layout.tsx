@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { useUser } from "@/components/user-provider"
 import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 
 export default function DashboardLayout({
   children,
@@ -12,6 +13,7 @@ export default function DashboardLayout({
 }) {
   const { user, loading, signOut } = useUser()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [mounted, setMounted] = useState(false)
   const redirectCheckedRef = useRef(false)
 
@@ -55,6 +57,9 @@ export default function DashboardLayout({
   // cargado cuando este layout se ejecuta.
 
   const handleSignOut = () => {
+    // Limpia la caché de datos para que en un navegador compartido el siguiente
+    // usuario no vea nada del anterior.
+    queryClient.clear()
     router.push("/")
     signOut()
   }

@@ -1,7 +1,62 @@
 # OrganizAPP — Contexto del Proyecto
 
-**Última actualización:** 2026-05-07  
-**Versión actual:** v0.9.0 — Miembros de agencias (contactos múltiples por agencia)
+**Última actualización:** 2026-06-24  
+**Versión actual:** v0.11.0 — Deploy, permisos reales, UI/UX y data layer
+
+---
+
+## Cambios v0.11.0 (deploy + permisos + UI/UX + rendimiento)
+
+### Deploy en Vercel
+- `vercel.json` usaba `npm run vercel-build` (script inexistente) → fallaba el
+  deploy. Ahora usa `next build`. Eliminada la config Prisma muerta y
+  `scripts/vercel-build.sh`.
+- `lib/supabase.ts` valida las env vars con mensaje claro (antes lanzaba el
+  críptico `supabaseUrl is required`).
+- Env necesarias en Vercel: `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only).
+
+### Permisos granulares revividos (crítico)
+- `UserProvider` ahora carga `user_type` y `agency_id` (antes nunca se leían),
+  por lo que el módulo de Producción de Agencias vuelve a aplicar de verdad los
+  roles `internal` / `agency` (`isInternal`/`isAgency` ya no son siempre false).
+- Migración idempotente que documenta `user_type`/`agency_id` en `profiles`:
+  `supabase/migrations/20260623000000_add_user_type_and_agency_to_profiles.sql`.
+
+### Proyectos y navegación
+- Dashboard y sidebar usan el mismo criterio: **admin ve todos** los proyectos;
+  los miembros solo donde son `project_members`.
+- Módulo de agencias v1 duplicado eliminado: `/dashboard/agency-production`
+  redirige a la v2 canónica (`/dashboard/agency-production-v2`).
+
+### UI/UX (sin "AI slop", monocromo)
+- Español consistente en dashboard, login, signup, ajustes, crear proyecto y
+  detalle de proyecto (incl. diálogos, placeholders, toasts; se quitaron restos
+  en inglés y turco).
+- Jerarquía tipográfica real, KPIs con `tabular-nums`, estados comunes
+  (`components/ui/states.tsx`).
+- Login/signup: se conservó el detalle de marca (`ShineBorder` + fondo con
+  gradiente) y se quitaron los botones OAuth (no estaban configurados).
+
+### Dos vistas por módulo (Kanban + Lista/Tabla)
+- Proyectos: nueva **vista Lista** (`components/task-list.tsx`) plana, filtrable
+  y ordenable, con cambio de estado (columna) en línea. Toggle Tablero|Lista
+  persistido en `localStorage`.
+- Toggle de vistas compartido: `components/ui/view-toggle.tsx` (usado también por
+  el toggle Kanban|Tabla de Agencias).
+
+### Data layer / rendimiento (React Query)
+- Caché global (`@tanstack/react-query`) → navegación instantánea en revisitas,
+  sin re-pedir el perfil y sin spinner a pantalla completa.
+- N+1 del dashboard colapsada en una sola query.
+- Limpieza de caché al cerrar sesión.
+- Detalle completo: `docs/data-layer-and-performance.md`.
+
+### Pendiente importante
+- **Auditoría de RLS en Supabase**: toda la seguridad real vive en las policies
+  (el cliente usa solo la anon key y escribe directo). Verificar sobre todo que
+  un usuario normal **no** pueda auto-promoverse a admin ni leer datos de otra
+  agencia. No es revisable desde el repo.
 
 ---
 

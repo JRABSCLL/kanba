@@ -78,8 +78,9 @@ export default function NewProjectPage() {
   };
 
   const canCreateProject = () => {
-    // OrganizAPP: sin límites de plan para uso organizacional interno
-    return !!profile;
+    // OrganizAPP: sin límites de plan para uso organizacional interno.
+    // El usuario ya viene del contexto; no hace falta re-pedir el perfil.
+    return !!user;
   };
 
   // Generate slug from project name
@@ -221,10 +222,7 @@ export default function NewProjectPage() {
     }
   };
 
-  if (loading) {
-    return <PageLoader label="Cargando" />;
-  }
-
+  // El formulario no depende de ninguna carga inicial: se renderiza al instante.
   return (
     <>
     <div className="mx-auto max-w-xl">
