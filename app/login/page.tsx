@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import Image from 'next/image'; 
 import { useTheme } from 'next-themes';
+import { ShineBorder } from '@/src/components/magicui/shine-border';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -66,15 +67,16 @@ export default function LoginPage() {
 
   if (checkingAuth) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/20 p-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/20 p-4">
+      <Card className="w-full max-w-md relative overflow-hidden">
+        <ShineBorder shineColor={["#A07CFE", "#FE8FB5", "#FFBE7B"]} />
         <CardHeader className="text-center">
         <div className="flex justify-center mb-4">
                 <Image 
