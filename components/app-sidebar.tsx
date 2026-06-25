@@ -13,6 +13,7 @@ import {
   Sun,
   Moon,
   Building2,
+  CalendarDays,
 } from "lucide-react"
 import { useRouter, usePathname } from "next/navigation"
 import { toast } from "sonner"
@@ -68,6 +69,7 @@ const menuItems = [
   { title: "Inicio", url: "/dashboard", icon: Home },
   { title: "Proyectos", url: "/dashboard/projects", icon: FolderIcon },
   { title: "Producción de Agencias", url: "/dashboard/agency-production-v2", icon: Building2 },
+  { title: "Calendario", url: "/dashboard/calendar", icon: CalendarDays },
   { title: "Guardados", url: "/dashboard/bookmarks", icon: Bookmark },
   { title: "Ajustes", url: "/dashboard/settings", icon: SettingsIcon },
 ]

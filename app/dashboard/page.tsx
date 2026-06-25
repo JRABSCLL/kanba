@@ -4,19 +4,19 @@
 
 
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { format, addDays } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, PageLoader } from '@/components/ui/states';
+import { ViewToggle } from '@/components/ui/view-toggle';
 import { useUser } from '@/components/user-provider';
-import { toast } from 'sonner';
-import { Plus, FolderOpen, Calendar, Users, Bell, CheckSquare, User, Sun, Moon } from 'lucide-react';
-import Link from 'next/link';
+import { useMyWork, type WorkScope, type WorkItem } from '@/hooks/use-my-work';
+import { Plus, FolderOpen, Calendar, CheckSquare, ListChecks, AlertTriangle, Square, Circle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useTheme } from 'next-themes';
 
 interface Project {
   id: string;
@@ -61,7 +61,7 @@ export default function DashboardPage() {
   // Carga cacheada (stale-while-revalidate). Al volver al panel se muestra al
   // instante desde caché y revalida en segundo plano.
   const { data, isLoading } = useQuery({
-    queryKey: ['dashboard', user?.id, isAdmin],
+    queryKey: ['dashboard-projects', user?.id, isAdmin],
     enabled: !!user,
     queryFn: async () => {
       // Admins ven TODOS los proyectos; los miembros solo donde son project_members.
@@ -69,38 +69,42 @@ export default function DashboardPage() {
         ? supabase.from('projects').select('*, project_members(role)')
         : supabase.from('projects').select('*, project_members!inner(role)');
       const { data: projects } = await projectsQuery.order('created_at', { ascending: false });
-
-      // Tareas asignadas en UNA sola query con joins anidados (antes era N+1).
-      const { data: tasks } = await supabase
-        .from('tasks')
-        .select('id, title, priority, due_date, columns(name, projects(id, name, slug))')
-        .eq('assigned_to', user!.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      const assignedTasks: TaskAssignment[] = (tasks || []).map((t: any) => {
-        // Los embeds to-one de Supabase pueden venir como objeto o array; normalizamos.
-        const column = Array.isArray(t.columns) ? t.columns[0] : t.columns;
-        const project = Array.isArray(column?.projects) ? column?.projects[0] : column?.projects;
-        return {
-          id: t.id,
-          title: t.title,
-          priority: t.priority,
-          due_date: t.due_date,
-          project_name: project?.name || 'Proyecto desconocido',
-          project_id: project?.id || '',
-          project_slug: project?.slug || '',
-          column_name: column?.name || '',
-        };
-      });
-
-      return { projects: (projects || []) as Project[], assignedTasks };
+      return { projects: (projects || []) as Project[] };
     },
   });
 
   const projects = data?.projects ?? [];
-  const assignedTasks = data?.assignedTasks ?? [];
   const showSkeleton = isLoading && !data;
+
+  // "Mi trabajo": tareas + entregables, según el alcance (mío / todo).
+  const [scope, setScope] = useState<WorkScope>('mine');
+  const { data: work = [], isLoading: workLoading } = useMyWork(scope);
+  const workSkeleton = workLoading && work.length === 0;
+  const pending = useMemo(() => work.filter((w) => !w.done), [work]);
+  const overdueCount = pending.filter((w) => w.overdue).length;
+
+  const todayKey = format(new Date(), 'yyyy-MM-dd');
+  const weekKey = format(addDays(new Date(), 7), 'yyyy-MM-dd');
+  const GROUPS = [
+    { key: 'vencidas', label: 'Vencidas' },
+    { key: 'hoy', label: 'Hoy' },
+    { key: 'semana', label: 'Esta semana' },
+    { key: 'adelante', label: 'Más adelante' },
+    { key: 'nofecha', label: 'Sin fecha' },
+  ] as const;
+  const bucketOf = (w: WorkItem) => {
+    if (!w.due_date) return 'nofecha';
+    const d = w.due_date.slice(0, 10);
+    if (d < todayKey) return 'vencidas';
+    if (d === todayKey) return 'hoy';
+    if (d <= weekKey) return 'semana';
+    return 'adelante';
+  };
+  const grouped = useMemo(() => {
+    const sorted = [...pending].sort((a, b) => ((a.due_date || '9999') < (b.due_date || '9999') ? -1 : 1));
+    return GROUPS.map((g) => ({ ...g, items: sorted.filter((w) => bucketOf(w) === g.key) })).filter((g) => g.items.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, todayKey, weekKey]);
 
   const canCreateProject = () => !!user;
 
@@ -169,16 +173,16 @@ export default function DashboardPage() {
       {/* Métricas */}
       <div className="mb-10 grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3">
         {[
-          { label: 'Proyectos', value: projects.length, icon: FolderOpen },
-          { label: 'Tareas asignadas', value: assignedTasks.length, icon: CheckSquare },
-          { label: 'Creados este mes', value: monthCount, icon: Calendar },
+          { label: 'Proyectos', value: projects.length, icon: FolderOpen, loading: showSkeleton, danger: false },
+          { label: 'Pendientes', value: pending.length, icon: ListChecks, loading: workSkeleton, danger: false },
+          { label: 'Vencidas', value: overdueCount, icon: AlertTriangle, loading: workSkeleton, danger: overdueCount > 0 },
         ].map((kpi) => (
           <div key={kpi.label} className="bg-card p-5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{kpi.label}</span>
-              <kpi.icon className="h-4 w-4 text-muted-foreground/50" strokeWidth={1.75} />
+              <kpi.icon className={`h-4 w-4 ${kpi.danger ? 'text-red-500/70' : 'text-muted-foreground/50'}`} strokeWidth={1.75} />
             </div>
-            <div className="mt-2 text-3xl font-semibold tabular-nums tracking-tight">{showSkeleton ? <span className="text-muted-foreground/40">—</span> : kpi.value}</div>
+            <div className={`mt-2 text-3xl font-semibold tabular-nums tracking-tight ${kpi.danger ? 'text-red-600 dark:text-red-400' : ''}`}>{kpi.loading ? <span className="text-muted-foreground/40">—</span> : kpi.value}</div>
           </div>
         ))}
       </div>
@@ -235,40 +239,53 @@ export default function DashboardPage() {
           )}
         </section>
 
-        {/* Tareas asignadas */}
+        {/* Mi trabajo */}
         <aside>
-          <h2 className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tareas asignadas</h2>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Mi trabajo</h2>
+            <ViewToggle
+              value={scope}
+              onChange={setScope}
+              options={[{ value: 'mine', label: 'Mío' }, { value: 'all', label: 'Todo' }]}
+            />
+          </div>
 
-          {showSkeleton ? (
+          {workSkeleton ? (
             <div className="space-y-3">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="h-[92px] animate-pulse rounded-lg border bg-muted/40" />
+                <div key={i} className="h-[60px] animate-pulse rounded-lg border bg-muted/40" />
               ))}
             </div>
-          ) : assignedTasks.length === 0 ? (
-            <EmptyState icon={CheckSquare} title="Sin tareas asignadas" />
+          ) : grouped.length === 0 ? (
+            <EmptyState icon={CheckSquare} title="Nada pendiente" />
           ) : (
-            <div className="space-y-3">
-              {assignedTasks.map((task) => (
-                <div key={task.id} className="rounded-lg border bg-card p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-sm font-medium leading-tight">{task.title}</span>
-                    <Badge variant="secondary" className={`shrink-0 text-[11px] ${getPriorityColor(task.priority)}`}>
-                      {priorityLabel(task.priority)}
-                    </Badge>
+            <div className="space-y-5">
+              {grouped.map((g) => (
+                <div key={g.key}>
+                  <h3 className={`mb-2 text-[11px] font-semibold uppercase tracking-wide ${g.key === 'vencidas' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                    {g.label} <span className="opacity-60">· {g.items.length}</span>
+                  </h3>
+                  <div className="space-y-1.5">
+                    {g.items.map((w) => {
+                      const Icon = w.kind === 'task' ? Square : Circle;
+                      return (
+                        <button
+                          key={w.kind + w.id}
+                          onClick={() => router.push(w.href)}
+                          className="flex w-full items-start gap-2 rounded-lg border bg-card p-2.5 text-left transition-colors hover:border-foreground/25"
+                        >
+                          <Icon className="mt-1 h-2.5 w-2.5 shrink-0 text-muted-foreground" fill="currentColor" strokeWidth={0} />
+                          <div className="min-w-0 flex-1">
+                            <div className={`truncate text-sm font-medium ${w.overdue ? 'text-red-600 dark:text-red-400' : ''}`}>{w.title}</div>
+                            <div className="truncate text-xs text-muted-foreground">
+                              {w.context}{w.due_date ? ` · ${formatDate(w.due_date)}` : ''}
+                            </div>
+                          </div>
+                          <Badge variant="secondary" className={`shrink-0 text-[11px] ${getPriorityColor(w.priority)}`}>{priorityLabel(w.priority)}</Badge>
+                        </button>
+                      );
+                    })}
                   </div>
-                  <p className="mt-1.5 text-xs text-muted-foreground">
-                    {task.project_name} · {task.column_name}
-                  </p>
-                  {task.due_date && (
-                    <p className="mt-0.5 text-xs text-muted-foreground">Vence el {formatDate(task.due_date)}</p>
-                  )}
-                  <button
-                    onClick={() => router.push(`/dashboard/projects/${task.project_slug}`)}
-                    className="mt-2 text-xs font-medium underline-offset-4 hover:underline"
-                  >
-                    Abrir proyecto
-                  </button>
                 </div>
               ))}
             </div>
