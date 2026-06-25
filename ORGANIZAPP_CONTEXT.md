@@ -13,21 +13,26 @@
   (`WorkItem`), cacheado con React Query. Alimenta el dashboard y el calendario.
 - `scope`: `mine` (lo mío) o `all` (todo lo visible, limitado por RLS).
 
-### Dashboard "Mi trabajo"
-- El panel lateral pasó de "tareas asignadas" a **Mi trabajo**: tareas +
-  entregables, **agrupados por urgencia** (Vencidas / Hoy / Esta semana / Más
-  adelante / Sin fecha), con interruptor **Mío / Todo**.
-- KPIs nuevos: **Pendientes** y **Vencidas** (en rojo si > 0).
+### Dashboard
+- Se probó un panel unificado "Mi trabajo" pero **se revirtió** al dashboard
+  anterior (KPIs Proyectos/Tareas asignadas/Creados este mes + panel de tareas
+  asignadas). Pendiente de revisar con calma más adelante.
 
 ### Calendario
-- Página nueva `/dashboard/calendar` (enlace en el sidebar): **rejilla mensual**
-  con date-fns, tareas (▪) y entregables (●) en su fecha; atrasados en rojo,
-  hechos tachados; "+N más" por día; navegación mes/Hoy; interruptor Mío/Todo;
-  **agenda por día en móvil**. Sin librería de calendario (a medida).
+- Página nueva `/dashboard/calendar` (enlace en el sidebar), construida a medida
+  con date-fns (sin librería de calendario).
+- **Responsive estilo iPhone:** en PC, rejilla mensual completa con los ítems
+  dentro de cada día; en móvil, **mini-rejilla del mes** (con puntito en los días
+  con ítems) + **lista del día seleccionado** debajo.
+- Tareas (▪) y entregables (●), atrasados en rojo, hechos tachados, "+N más" por
+  día en PC, navegación mes/Hoy, interruptor Mío/Todo.
 
 ### Notas
 - El enlace de un entregable lleva al módulo de agencias (no hay deep-link a un
   plan concreto porque el módulo navega por estado interno, no por URL).
+- "Mío" hoy muestra casi todo para un admin, porque `responsible_internal_id`
+  apunta al creador del plan en todos sus entregables. Se afinará cuando se haga
+  "responsable por entregable".
 
 ---
 

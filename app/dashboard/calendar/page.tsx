@@ -12,6 +12,7 @@ import {
   eachDayOfInterval,
   format,
   isSameMonth,
+  isSameDay,
   isToday,
 } from "date-fns"
 import { es } from "date-fns/locale"
@@ -31,10 +32,11 @@ function Chip({ item, onClick }: { item: WorkItem; onClick: () => void }) {
       type="button"
       onClick={onClick}
       title={`${item.title} · ${item.context}`}
-      className={`flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[11px] hover:bg-muted ${item.overdue ? "text-red-600 dark:text-red-400" : ""} ${item.done ? "text-muted-foreground line-through" : ""}`}
+      className={`flex w-full items-center gap-1.5 truncate rounded px-1.5 py-1 text-left text-xs hover:bg-muted ${item.overdue ? "text-red-600 dark:text-red-400" : ""} ${item.done ? "text-muted-foreground line-through" : ""}`}
     >
       <Icon className="h-2 w-2 shrink-0" fill="currentColor" strokeWidth={0} />
       <span className="truncate">{item.title}</span>
+      <span className="ml-auto shrink-0 truncate text-[10px] text-muted-foreground">{item.context}</span>
     </button>
   )
 }
@@ -42,6 +44,7 @@ function Chip({ item, onClick }: { item: WorkItem; onClick: () => void }) {
 export default function CalendarPage() {
   const router = useRouter()
   const [cursor, setCursor] = useState<Date>(() => new Date())
+  const [selectedDay, setSelectedDay] = useState<Date>(() => new Date())
   const [scope, setScope] = useState<WorkScope>("mine")
   const { data: items = [], isLoading } = useMyWork(scope)
 
@@ -60,10 +63,14 @@ export default function CalendarPage() {
     return map
   }, [items])
 
+  const itemsOf = (day: Date) => byDay.get(format(day, "yyyy-MM-dd")) || []
   const go = (item: WorkItem) => router.push(item.href)
 
-  // Días del mes con ítems (para la agenda móvil).
-  const monthDaysWithItems = days.filter((d) => isSameMonth(d, cursor) && (byDay.get(format(d, "yyyy-MM-dd"))?.length ?? 0) > 0)
+  const prevMonth = () => { const m = subMonths(cursor, 1); setCursor(m); setSelectedDay(startOfMonth(m)) }
+  const nextMonth = () => { const m = addMonths(cursor, 1); setCursor(m); setSelectedDay(startOfMonth(m)) }
+  const today = () => { const t = new Date(); setCursor(t); setSelectedDay(t) }
+
+  const selectedItems = itemsOf(selectedDay)
 
   return (
     <div className="mx-auto w-full max-w-6xl">
@@ -72,13 +79,9 @@ export default function CalendarPage() {
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight capitalize">{format(cursor, "LLLL yyyy", { locale: es })}</h1>
           <div className="ml-2 flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCursor((c) => subMonths(c, 1))} aria-label="Mes anterior">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCursor((c) => addMonths(c, 1))} aria-label="Mes siguiente">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="sm" className="h-8" onClick={() => setCursor(new Date())}>Hoy</Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={prevMonth} aria-label="Mes anterior"><ChevronLeft className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={nextMonth} aria-label="Mes siguiente"><ChevronRight className="h-4 w-4" /></Button>
+            <Button variant="outline" size="sm" className="h-8" onClick={today}>Hoy</Button>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -89,10 +92,7 @@ export default function CalendarPage() {
           <ViewToggle
             value={scope}
             onChange={setScope}
-            options={[
-              { value: "mine", label: "Mío" },
-              { value: "all", label: "Todo" },
-            ]}
+            options={[{ value: "mine", label: "Mío" }, { value: "all", label: "Todo" }]}
           />
         </div>
       </header>
@@ -101,7 +101,7 @@ export default function CalendarPage() {
         <PageLoader label="Cargando calendario" />
       ) : (
         <>
-          {/* Rejilla mensual (desktop) */}
+          {/* ---------- PC: rejilla mensual completa ---------- */}
           <div className="hidden overflow-hidden rounded-lg border md:block">
             <div className="grid grid-cols-7 border-b bg-muted/30 text-xs font-medium text-muted-foreground">
               {WEEKDAYS.map((w) => <div key={w} className="px-2 py-2">{w}</div>)}
@@ -111,15 +111,12 @@ export default function CalendarPage() {
                 const key = format(day, "yyyy-MM-dd")
                 const dayItems = byDay.get(key) || []
                 const inMonth = isSameMonth(day, cursor)
-                const today = isToday(day)
                 const shown = dayItems.slice(0, 3)
                 const extra = dayItems.length - shown.length
                 return (
-                  <div key={key} className={`min-h-[100px] border-b border-r p-1 last:border-r-0 ${inMonth ? "" : "bg-muted/20 text-muted-foreground"}`}>
+                  <div key={key} className={`min-h-[104px] border-b border-r p-1 last:border-r-0 ${inMonth ? "" : "bg-muted/20 text-muted-foreground"}`}>
                     <div className="mb-1">
-                      <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs ${today ? "bg-primary font-medium text-primary-foreground" : ""}`}>
-                        {format(day, "d")}
-                      </span>
+                      <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs ${isToday(day) ? "bg-primary font-medium text-primary-foreground" : ""}`}>{format(day, "d")}</span>
                     </div>
                     <div className="space-y-0.5">
                       {shown.map((it) => <Chip key={it.kind + it.id} item={it} onClick={() => go(it)} />)}
@@ -128,11 +125,9 @@ export default function CalendarPage() {
                           <PopoverTrigger asChild>
                             <button type="button" className="px-1 text-[11px] text-muted-foreground hover:text-foreground">+{extra} más</button>
                           </PopoverTrigger>
-                          <PopoverContent align="start" className="w-64 p-2">
+                          <PopoverContent align="start" className="w-72 p-2">
                             <div className="mb-1 px-1 text-xs font-medium capitalize">{format(day, "EEEE d 'de' LLLL", { locale: es })}</div>
-                            <div className="space-y-0.5">
-                              {dayItems.map((it) => <Chip key={it.kind + it.id} item={it} onClick={() => go(it)} />)}
-                            </div>
+                            <div className="space-y-0.5">{dayItems.map((it) => <Chip key={it.kind + it.id} item={it} onClick={() => go(it)} />)}</div>
                           </PopoverContent>
                         </Popover>
                       )}
@@ -143,23 +138,48 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          {/* Agenda (móvil) */}
-          <div className="space-y-4 md:hidden">
-            {monthDaysWithItems.length === 0 ? (
-              <EmptyState icon={CalendarDays} title="Nada este mes" description="No hay tareas ni entregables con fecha en este mes." />
-            ) : (
-              monthDaysWithItems.map((day) => {
-                const dayItems = byDay.get(format(day, "yyyy-MM-dd")) || []
-                return (
-                  <div key={format(day, "yyyy-MM-dd")}>
-                    <div className={`mb-1 text-sm font-medium capitalize ${isToday(day) ? "text-primary" : ""}`}>{format(day, "EEEE d", { locale: es })}</div>
-                    <div className="space-y-1 rounded-lg border p-2">
-                      {dayItems.map((it) => <Chip key={it.kind + it.id} item={it} onClick={() => go(it)} />)}
-                    </div>
-                  </div>
-                )
-              })
-            )}
+          {/* ---------- Móvil: mini-rejilla + lista del día (estilo iPhone) ---------- */}
+          <div className="md:hidden">
+            <div className="overflow-hidden rounded-lg border">
+              <div className="grid grid-cols-7 border-b bg-muted/30 text-center text-[11px] font-medium text-muted-foreground">
+                {WEEKDAYS.map((w) => <div key={w} className="py-1.5">{w[0]}</div>)}
+              </div>
+              <div className="grid grid-cols-7">
+                {days.map((day) => {
+                  const dayItems = itemsOf(day)
+                  const inMonth = isSameMonth(day, cursor)
+                  const selected = isSameDay(day, selectedDay)
+                  const hasOverdue = dayItems.some((it) => it.overdue)
+                  return (
+                    <button
+                      key={format(day, "yyyy-MM-dd")}
+                      type="button"
+                      onClick={() => setSelectedDay(day)}
+                      className={`relative flex h-11 flex-col items-center justify-center text-sm ${!inMonth ? "text-muted-foreground/40" : ""} ${selected ? "bg-primary text-primary-foreground" : isToday(day) ? "font-semibold text-primary" : ""}`}
+                    >
+                      {format(day, "d")}
+                      {dayItems.length > 0 && (
+                        <span className={`absolute bottom-1.5 h-1 w-1 rounded-full ${selected ? "bg-primary-foreground" : hasOverdue ? "bg-red-500" : "bg-foreground/50"}`} />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Lista del día seleccionado */}
+            <div className="mt-4">
+              <div className={`mb-2 text-sm font-medium capitalize ${isToday(selectedDay) ? "text-primary" : ""}`}>
+                {format(selectedDay, "EEEE d 'de' LLLL", { locale: es })}
+              </div>
+              {selectedItems.length === 0 ? (
+                <EmptyState icon={CalendarDays} title="Nada este día" />
+              ) : (
+                <div className="space-y-1 rounded-lg border p-2">
+                  {selectedItems.map((it) => <Chip key={it.kind + it.id} item={it} onClick={() => go(it)} />)}
+                </div>
+              )}
+            </div>
           </div>
         </>
       )}
