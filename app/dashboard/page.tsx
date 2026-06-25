@@ -53,7 +53,6 @@ interface TaskAssignment {
 export default function DashboardPage() {
   const { user } = useUser();
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
 
   // El rol ya viene del contexto (UserProvider); no re-pedimos el perfil.
   const isAdmin = user?.role === 'admin' && user?.is_active === true;
