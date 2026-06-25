@@ -1,7 +1,33 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-06-24  
-**Versión actual:** v0.12.0 — Temas (light/dark/sepia) y edición de entregables
+**Versión actual:** v0.13.0 — Calendario y dashboard "Mi trabajo"
+
+---
+
+## Cambios v0.13.0 (calendario + dashboard unificado)
+
+### Capa de datos compartida
+- `hooks/use-my-work.ts` → hook `useMyWork(scope)` que une **tareas asignadas**
+  (proyectos) + **entregables como responsable** (agencias) en una forma común
+  (`WorkItem`), cacheado con React Query. Alimenta el dashboard y el calendario.
+- `scope`: `mine` (lo mío) o `all` (todo lo visible, limitado por RLS).
+
+### Dashboard "Mi trabajo"
+- El panel lateral pasó de "tareas asignadas" a **Mi trabajo**: tareas +
+  entregables, **agrupados por urgencia** (Vencidas / Hoy / Esta semana / Más
+  adelante / Sin fecha), con interruptor **Mío / Todo**.
+- KPIs nuevos: **Pendientes** y **Vencidas** (en rojo si > 0).
+
+### Calendario
+- Página nueva `/dashboard/calendar` (enlace en el sidebar): **rejilla mensual**
+  con date-fns, tareas (▪) y entregables (●) en su fecha; atrasados en rojo,
+  hechos tachados; "+N más" por día; navegación mes/Hoy; interruptor Mío/Todo;
+  **agenda por día en móvil**. Sin librería de calendario (a medida).
+
+### Notas
+- El enlace de un entregable lleva al módulo de agencias (no hay deep-link a un
+  plan concreto porque el módulo navega por estado interno, no por URL).
 
 ---
 
