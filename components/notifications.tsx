@@ -174,7 +174,7 @@ export function Notifications({ userId }: NotificationsProps) {
       toast.success("All notifications marked as read")
     } catch (error: any) {
       console.error("[v0] Error marking all as read:", error)
-      toast.error("Failed to mark all as read")
+      toast.error("No se pudieron marcar como leídas")
     }
   }
 
@@ -191,7 +191,7 @@ export function Notifications({ userId }: NotificationsProps) {
       })
     } catch (error: any) {
       console.error("[v0] Error deleting notification:", error)
-      toast.error("Failed to delete notification")
+      toast.error("No se pudo borrar la notificación")
     }
   }
 
@@ -215,11 +215,11 @@ export function Notifications({ userId }: NotificationsProps) {
 
     if (diffInHours < 1) {
       const diffInMinutes = Math.floor(diffInHours * 60)
-      return diffInMinutes <= 1 ? "Just now" : `${diffInMinutes}m ago`
+      return diffInMinutes <= 1 ? "Ahora" : `hace ${diffInMinutes} min`
     } else if (diffInHours < 24) {
-      return `${Math.floor(diffInHours)}h ago`
+      return `hace ${Math.floor(diffInHours)} h`
     } else if (diffInHours < 168) {
-      return `${Math.floor(diffInHours / 24)}d ago`
+      return `hace ${Math.floor(diffInHours / 24)} d`
     } else {
       return date.toLocaleDateString()
     }
@@ -241,27 +241,27 @@ export function Notifications({ userId }: NotificationsProps) {
               {unreadCount > 9 ? "9+" : unreadCount}
             </Badge>
           )}
-          <span className="sr-only">Notifications</span>
+          <span className="sr-only">Notificaciones</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 ml-4 rounded-xl ">
         <div className="flex items-center justify-between p-3">
-          <h4 className="font-semibold">Notifications</h4>
+          <h4 className="font-semibold">Notificaciones</h4>
 
           <Button variant="outline" size="sm" onClick={markAllAsRead} disabled={unreadCount == 0}>
             <CheckCheck className="h-4 w-4 mr-1" />
-            Mark all read
+            Marcar todo leído
           </Button>
         </div>
         <DropdownMenuSeparator />
 
         {loading ? (
-          <div className="p-4 text-center text-sm text-muted-foreground">Loading notifications...</div>
+          <div className="p-4 text-center text-sm text-muted-foreground">Cargando notificaciones...</div>
         ) : notifications.length === 0 ? (
           <div className="p-6 text-center  text-gray-300">
             <Bell className="h-5 w-5 mx-auto mb-2 opacity-50" />
-            <h3 className="font-semibold text-gray-200 mb-2">No notifications yet</h3>
-            <p className="text-xs">You&apos;ll see updates about your tasks and projects here</p>
+            <h3 className="font-semibold text-gray-200 mb-2">Sin notificaciones</h3>
+            <p className="text-xs">Aquí verás avisos de tus tareas y proyectos</p>
           </div>
         ) : (
           <div className="max-h-96 overflow-y-auto p-3">
@@ -290,7 +290,7 @@ export function Notifications({ userId }: NotificationsProps) {
                                 onClick={() => markAsRead(notification.id)}
                               >
                                 <Check className="h-3 w-3 mr-1" />
-                                Mark read
+                                Marcar leído
                               </Button>
                             )}
                             <Button

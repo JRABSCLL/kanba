@@ -128,7 +128,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
       setMembers(completeMembers);
     } catch (error: any) {
       console.error('Error loading members:', error);
-      toast.error('Failed to load team members');
+      toast.error('No se pudieron cargar los miembros');
     } finally {
       setLoading(false);
     }
@@ -209,7 +209,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
       setSearchResults(availableUsers);
     } catch (error: any) {
       console.error('Error searching users:', error);
-      toast.error('Search failed: ' + error.message);
+      toast.error('Error al buscar: ' + error.message);
       setSearchResults([]);
     } finally {
       setSearching(false);
@@ -230,7 +230,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
     e.preventDefault();
     
     if (!inviteEmail.trim()) {
-      toast.error('Please enter an email address');
+      toast.error('Introduce un correo');
       return;
     }
 
@@ -254,7 +254,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
 
       if (userError) {
         console.error('User lookup error:', userError);
-        toast.error('Failed to search for user: ' + userError.message);
+        toast.error('No se pudo buscar el usuario: ' + userError.message);
         return;
       }
 
@@ -284,7 +284,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
       }
 
       if (existingMember) {
-        toast.error('User is already a member of this project');
+        toast.error('El usuario ya es miembro del proyecto');
         return;
       }
 
@@ -301,7 +301,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
 
       if (inviteError) throw inviteError;
 
-      toast.success(`${existingUser.full_name || existingUser.email} has been added to the project!`);
+      toast.success(`${existingUser.full_name || existingUser.email} fue agregado al proyecto`);
       
       // Reset form
       setInviteEmail('');
@@ -332,11 +332,11 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
 
       if (error) throw error;
 
-      toast.success(`${memberName} has been removed from the project`);
+      toast.success(`${memberName} fue quitado del proyecto`);
       await loadMembers();
     } catch (error: any) {
       console.error('Error removing member:', error);
-      toast.error('Failed to remove member');
+      toast.error('No se pudo quitar al miembro');
     }
   };
 
@@ -349,11 +349,11 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
 
       if (error) throw error;
 
-      toast.success(`${memberName}'s role has been updated to ${newRole}`);
+      toast.success(`Rol de ${memberName} actualizado a ${newRole}`);
       await loadMembers();
     } catch (error: any) {
       console.error('Error updating role:', error);
-      toast.error('Failed to update role');
+      toast.error('No se pudo actualizar el rol');
     }
   };
 
@@ -404,10 +404,10 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
           <div>
             <CardTitle className="flex items-center">
               <Users className="h-5 w-5 mr-2" />
-              Team Members
+              Miembros del equipo
             </CardTitle>
             <CardDescription>
-              Manage who has access to this project
+              Gestiona quién tiene acceso a este proyecto
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -419,25 +419,25 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
                 <DialogTrigger asChild>
                   <Button size="sm">
                     <Plus className="h-4 w-4 mr-2" />
-                    Invite Member
+                    Invitar miembro
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Invite Team Member</DialogTitle>
+                    <DialogTitle>Invitar al equipo</DialogTitle>
                     <DialogDescription>
                       Busca usuarios aprobados de OrganizAPP por email o nombre para agregarlos a tu proyecto.
                     </DialogDescription>
                   </DialogHeader>
                   <form onSubmit={handleInviteMember} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="email">Search by Email *</Label>
+                      <Label htmlFor="email">Buscar por correo *</Label>
                       <div className="relative">
                         <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="email"
                           type="email"
-                          placeholder="Start typing an email address..."
+                          placeholder="Empieza a escribir un correo..."
                           value={inviteEmail}
                           onChange={(e) => handleEmailChange(e.target.value)}
                           className="pl-10"
@@ -454,7 +454,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
                           <div className="p-2 text-xs text-muted-foreground border-b bg-green-50 dark:bg-green-950/10">
                             <div className="flex items-center">
                               <CheckCircle className="h-3 w-3 mr-1 text-green-600" />
-                              Found {searchResults.length} user{searchResults.length !== 1 ? 's' : ''}:
+                              Encontrados {searchResults.length} usuario{searchResults.length !== 1 ? 's' : ''}:
                             </div>
                           </div>
                           {searchResults.map((user) => (
@@ -495,7 +495,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
                           <div className="flex items-center text-amber-800 dark:text-amber-200">
                             <AlertCircle className="h-4 w-4 mr-2" />
                             <div>
-                              <p className="text-sm font-medium">No users found</p>
+                              <p className="text-sm font-medium">No se encontraron usuarios</p>
                               <p className="text-xs">
                                 La persona debe tener una cuenta aprobada en OrganizAPP.
                               </p>
@@ -510,7 +510,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
                     </div>
                     
                     <div className="space-y-2">
-                      <Label htmlFor="role">Role</Label>
+                      <Label htmlFor="role">Rol</Label>
                       <Select value={inviteRole} onValueChange={(value: 'admin' | 'member') => setInviteRole(value)}>
                         <SelectTrigger>
                           <SelectValue />
@@ -519,13 +519,13 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
                           <SelectItem value="member">
                             <div className="flex items-center">
                               <User className="h-4 w-4 mr-2" />
-                              Member - Can view and edit tasks
+                              Miembro — Puede ver y editar tareas
                             </div>
                           </SelectItem>
                           <SelectItem value="admin">
                             <div className="flex items-center">
                               <Shield className="h-4 w-4 mr-2" />
-                              Admin - Can manage project and members
+                              Admin — Puede gestionar proyecto y miembros
                             </div>
                           </SelectItem>
                         </SelectContent>
@@ -536,14 +536,14 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
                       <Button type="submit" disabled={inviting || !inviteEmail.trim()} className="flex-1">
                         {inviting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         <Mail className="mr-2 h-4 w-4" />
-                        Add to Project
+                        Agregar al proyecto
                       </Button>
                       <Button type="button" variant="outline" onClick={() => {
                         setInviteDialogOpen(false);
                         setInviteEmail('');
                         setSearchResults([]);
                       }}>
-                        Cancel
+                        Cancelar
                       </Button>
                     </div>
                   </form>
@@ -605,7 +605,7 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
                 <div>
                   <div className="flex items-center space-x-2">
                     <p className="font-medium">
-                      {member.profiles?.full_name || member.profiles?.email || 'Unknown User'}
+                      {member.profiles?.full_name || member.profiles?.email || 'Usuario desconocido'}
                     </p>
                     <Badge variant={getRoleBadgeVariant(member.role)} className="text-xs">
                       <span className="flex items-center">
@@ -615,12 +615,12 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {member.profiles?.email || 'Email yok'}
+                    {member.profiles?.email || 'Sin correo'}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {member.joined_at 
-                      ? `Joined ${new Date(member.joined_at).toLocaleDateString()}`
-                      : `Invited ${new Date(member.invited_at).toLocaleDateString()}`
+                      ? `Se unió el ${new Date(member.joined_at).toLocaleDateString()}`
+                      : `Invitado el ${new Date(member.invited_at).toLocaleDateString()}`
                     }
                   </p>
                 </div>
@@ -636,26 +636,26 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
                   <DropdownMenuContent align="end">
                     {member.role !== 'admin' && (
                       <DropdownMenuItem 
-                        onClick={() => handleUpdateRole(member.id, 'admin', member.profiles?.full_name || member.profiles?.email || 'Bilinmeyen Kullanıcı')}
+                        onClick={() => handleUpdateRole(member.id, 'admin', member.profiles?.full_name || member.profiles?.email || 'Usuario desconocido')}
                       >
                         <Shield className="h-4 w-4 mr-2" />
-                        Make Admin
+                        Hacer admin
                       </DropdownMenuItem>
                     )}
                     {member.role === 'admin' && (
                       <DropdownMenuItem 
-                        onClick={() => handleUpdateRole(member.id, 'member', member.profiles?.full_name || member.profiles?.email || 'Bilinmeyen Kullanıcı')}
+                        onClick={() => handleUpdateRole(member.id, 'member', member.profiles?.full_name || member.profiles?.email || 'Usuario desconocido')}
                       >
                         <User className="h-4 w-4 mr-2" />
-                        Make Member
+                        Hacer miembro
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem 
-                      onClick={() => handleRemoveMember(member.id, member.profiles?.full_name || member.profiles?.email || 'Bilinmeyen Kullanıcı')}
+                      onClick={() => handleRemoveMember(member.id, member.profiles?.full_name || member.profiles?.email || 'Usuario desconocido')}
                       className="text-destructive"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Remove
+                      Quitar
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -666,8 +666,8 @@ export function TeamManagement({ projectId, userSubscriptionStatus, isProjectOwn
           {members.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No team members yet</p>
-              <p className="text-sm">Invite team members to collaborate on this project</p>
+              <p>Aún no hay miembros</p>
+              <p className="text-sm">Invita a personas para colaborar en este proyecto</p>
             </div>
           )}
         </div>
