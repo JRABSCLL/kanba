@@ -357,6 +357,10 @@ export function AgencyProductionModule() {
   const [searchingUsers, setSearchingUsers] = useState(false)
   const [selectedResponsible, setSelectedResponsible] = useState<{ id: string; email: string; full_name: string | null } | null>(null)
   const [usersCache, setUsersCache] = useState<Map<string, { id: string; email: string; full_name: string | null }>>(new Map())
+  // Responsable del entregable que se está editando (independiente del del plan).
+  const [editResponsible, setEditResponsible] = useState<{ id: string; email: string; full_name: string | null } | null>(null)
+  // Directorio de usuarios internos/activos, para mostrar y resolver responsables.
+  const [usersById, setUsersById] = useState<Map<string, { id: string; email: string; full_name: string | null }>>(new Map())
 
   const agencyById = useMemo(() => new Map(agencies.map((agency) => [agency.id, agency])), [agencies])
   const brandById = useMemo(() => new Map(brands.map((brand) => [brand.id, brand])), [brands])
@@ -510,6 +514,13 @@ export function AgencyProductionModule() {
         planStages: planStagesData,
         stageTemplates: stageTemplatesData,
       })
+
+      // Directorio de usuarios internos (para mostrar/asignar responsables).
+      // No bloquea: si falla, el módulo sigue funcionando.
+      const { data: profs } = await supabase.from("profiles").select("id, full_name, email").eq("is_active", true)
+      const umap = new Map<string, { id: string; email: string; full_name: string | null }>()
+      ;(profs || []).forEach((p: any) => umap.set(p.id, { id: p.id, email: p.email, full_name: p.full_name }))
+      setUsersById(umap)
     } catch (error: any) {
       setSchemaError(error?.message || "No se pudo cargar el módulo de agencias")
     } finally {
@@ -948,6 +959,11 @@ export function AgencyProductionModule() {
       external_url: deliverable.external_url || "",
       notes: deliverable.notes || "",
     })
+    setEditResponsible(
+      deliverable.responsible_internal_id
+        ? usersById.get(deliverable.responsible_internal_id) || { id: deliverable.responsible_internal_id, email: "", full_name: null }
+        : null,
+    )
   }
 
   async function saveDeliverableEdit(event: FormEvent) {
@@ -972,6 +988,7 @@ export function AgencyProductionModule() {
         due_date: deliverableForm.due_date || null,
         external_url: deliverableForm.external_url.trim() || null,
         notes: deliverableForm.notes.trim() || null,
+        responsible_internal_id: editResponsible?.id ?? null,
         updated_at: now,
         ...timestampFields,
       }
@@ -980,6 +997,7 @@ export function AgencyProductionModule() {
       setDeliverables((prev) => prev.map((item) => (item.id === editingDeliverable.id ? { ...item, ...payload } : item)))
       setEditingDeliverable(null)
       setDeliverableForm(null)
+      setEditResponsible(null)
       toast.success("Entregable actualizado")
     } catch (error: any) {
       toast.error(error.message || "No se pudo actualizar el entregable")
@@ -1113,7 +1131,7 @@ export function AgencyProductionModule() {
       {/* Edit dialog (modal — sin salto de scroll) */}
       <Dialog
         open={!!editingDeliverable && !!deliverableForm}
-        onOpenChange={(open) => { if (!open) { setEditingDeliverable(null); setDeliverableForm(null) } }}
+        onOpenChange={(open) => { if (!open) { setEditingDeliverable(null); setDeliverableForm(null); setEditResponsible(null) } }}
       >
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           {deliverableForm && (
@@ -1121,10 +1139,22 @@ export function AgencyProductionModule() {
               form={deliverableForm}
               setForm={setDeliverableForm}
               onSubmit={saveDeliverableEdit}
-              onCancel={() => { setEditingDeliverable(null); setDeliverableForm(null) }}
+              onCancel={() => { setEditingDeliverable(null); setDeliverableForm(null); setEditResponsible(null) }}
               saving={updatingDeliverableId === editingDeliverable?.id}
               canDelete={canManageProduction}
               onDelete={() => editingDeliverable && deleteDeliverable(editingDeliverable)}
+              responsibleField={
+                <UserSearchField
+                  searchTerm={userSearchTerm}
+                  setSearchTerm={setUserSearchTerm}
+                  searchResults={userSearchResults}
+                  searching={searchingUsers}
+                  selectedUser={editResponsible}
+                  onSelectUser={setEditResponsible}
+                  onClearUser={() => setEditResponsible(null)}
+                  placeholder="Buscar responsable por email o nombre..."
+                />
+              }
             />
           )}
         </DialogContent>
@@ -2130,8 +2160,8 @@ function SetupView(props: any) {
   </div>
 }
 
-function EditDeliverablePanel({ form, setForm, onSubmit, onCancel, saving, onDelete, canDelete }: { form: DeliverableForm; setForm: (form: DeliverableForm) => void; onSubmit: (event: FormEvent) => void; onCancel: () => void; saving: boolean; onDelete?: () => void; canDelete?: boolean }) {
-  return <><DialogHeader><DialogTitle>Editar entregable</DialogTitle><DialogDescription>Actualiza nombre, estado, prioridad, fecha, link y notas.</DialogDescription></DialogHeader><form onSubmit={onSubmit} className="grid gap-3 md:grid-cols-3 pt-2"><Field label="Título" className="md:col-span-2"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field><Field label="Tipo"><Input value={form.deliverable_type} onChange={(e) => setForm({ ...form, deliverable_type: e.target.value })} required /></Field><Field label="Estado"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{FLOW_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select></Field><Field label="Prioridad"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}><option value="low">Baja</option><option value="medium">Media</option><option value="high">Alta</option></select></Field><Field label="Fecha límite"><Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} /></Field><Field label="Canal"><Input value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })} /></Field><Field label="Formato"><Input value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })} /></Field><Field label="Link externo"><Input value={form.external_url} onChange={(e) => setForm({ ...form, external_url: e.target.value })} placeholder="https://..." /></Field><Field label="Descripción" className="md:col-span-3"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field><Field label="Notas" className="md:col-span-3"><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field><div className="flex items-center gap-2 md:col-span-3"><Button type="submit" disabled={saving}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Guardar</Button><Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>{canDelete && onDelete && <Button type="button" variant="ghost" className="ml-auto text-destructive hover:text-destructive" onClick={onDelete} disabled={saving}><Trash2 className="mr-2 h-4 w-4" />Eliminar</Button>}</div></form></>
+function EditDeliverablePanel({ form, setForm, onSubmit, onCancel, saving, onDelete, canDelete, responsibleField }: { form: DeliverableForm; setForm: (form: DeliverableForm) => void; onSubmit: (event: FormEvent) => void; onCancel: () => void; saving: boolean; onDelete?: () => void; canDelete?: boolean; responsibleField?: ReactNode }) {
+  return <><DialogHeader><DialogTitle>Editar entregable</DialogTitle><DialogDescription>Actualiza nombre, estado, prioridad, fecha, link y notas.</DialogDescription></DialogHeader><form onSubmit={onSubmit} className="grid gap-3 md:grid-cols-3 pt-2"><Field label="Título" className="md:col-span-2"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></Field><Field label="Tipo"><Input value={form.deliverable_type} onChange={(e) => setForm({ ...form, deliverable_type: e.target.value })} required /></Field><Field label="Estado"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{FLOW_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select></Field><Field label="Prioridad"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}><option value="low">Baja</option><option value="medium">Media</option><option value="high">Alta</option></select></Field><Field label="Fecha límite"><Input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} /></Field><Field label="Canal"><Input value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })} /></Field><Field label="Formato"><Input value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })} /></Field><Field label="Link externo"><Input value={form.external_url} onChange={(e) => setForm({ ...form, external_url: e.target.value })} placeholder="https://..." /></Field><Field label="Descripción" className="md:col-span-3"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field><Field label="Notas" className="md:col-span-3"><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>{responsibleField && <Field label="Responsable interno" className="md:col-span-3">{responsibleField}</Field>}<div className="flex items-center gap-2 md:col-span-3"><Button type="submit" disabled={saving}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Guardar</Button><Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>{canDelete && onDelete && <Button type="button" variant="ghost" className="ml-auto text-destructive hover:text-destructive" onClick={onDelete} disabled={saving}><Trash2 className="mr-2 h-4 w-4" />Eliminar</Button>}</div></form></>
 }
 
 function PermissionCard() {
