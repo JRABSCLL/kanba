@@ -14,6 +14,7 @@ import {
   Moon,
   Building2,
   CalendarDays,
+  Users,
 } from "lucide-react"
 import { useRouter, usePathname } from "next/navigation"
 import { toast } from "sonner"
@@ -70,6 +71,7 @@ const menuItems = [
   { title: "Proyectos", url: "/dashboard/projects", icon: FolderIcon },
   { title: "Producción de Agencias", url: "/dashboard/agency-production-v2", icon: Building2 },
   { title: "Calendario", url: "/dashboard/calendar", icon: CalendarDays },
+  { title: "Equipo", url: "/dashboard/team", icon: Users, managerOnly: true },
   { title: "Guardados", url: "/dashboard/bookmarks", icon: Bookmark },
   { title: "Ajustes", url: "/dashboard/settings", icon: SettingsIcon },
 ]
@@ -83,6 +85,7 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
   const { theme, setTheme } = useTheme();
 
   const isAdmin = user?.role === 'admin' && user?.is_active === true;
+  const isManager = (user?.role === 'admin' || user?.user_type === 'internal') && user?.is_active === true;
 
   const userData = {
     name: user?.full_name || user?.email || 'User',
@@ -189,6 +192,10 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => {
+                if ((item as any).managerOnly && !isManager) {
+                  return null;
+                }
+
                 if (item.url === "/dashboard/projects") {
                   return (
                     <SidebarMenuItem key={item.title}>
