@@ -8,6 +8,7 @@ import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, D
 import { supabase } from "@/lib/supabase"
 import { useUser } from "@/components/user-provider"
 import { ViewToggle } from "@/components/ui/view-toggle"
+import { DeliverableComments } from "@/components/deliverable-comments"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -1156,6 +1157,11 @@ export function AgencyProductionModule() {
                 />
               }
             />
+          )}
+          {editingDeliverable && user?.id && (
+            <div className="mt-5 border-t pt-4">
+              <DeliverableComments deliverableId={editingDeliverable.id} currentUserId={user.id} />
+            </div>
           )}
         </DialogContent>
       </Dialog>

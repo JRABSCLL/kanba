@@ -1,7 +1,35 @@
 # OrganizAPP — Contexto del Proyecto
 
-**Última actualización:** 2026-06-24  
-**Versión actual:** v0.13.0 — Calendario y dashboard "Mi trabajo"
+**Última actualización:** 2026-06-25  
+**Versión actual:** v0.14.0 — Vista de equipo + bucle de control de agencias
+
+---
+
+## Cambios v0.14.0 (control de equipo)
+
+### Vista de Equipo (mando)
+- Página `/dashboard/team` (enlace en sidebar, **solo admin/interno**).
+- `hooks/use-team-workload.ts`: por persona, **pendientes + vencidas** sumando
+  tareas asignadas + entregables de los que es responsable. Ordenado por más
+  atrasado; expandir para ver sus ítems.
+
+### Bucle de control de agencias
+- **Responsable por entregable:** selector en el modal de edición; se guarda en
+  `responsible_internal_id`. Se ve en la vista de Equipo.
+- **Notificaciones de agencia:** trigger que avisa al responsable al asignarse
+  o al cambiar el estado (migración `20260625020000_deliverable_notifications`).
+- **Comentarios en entregables:** tabla `deliverable_comments` + panel en el
+  modal (migración `20260625030000_deliverable_comments`).
+
+### Seguridad e idioma (v0.13.x)
+- Trigger anti-auto-promoción (`20260625000000`).
+- Notificaciones en español (`20260625010000`), Equipo y campana traducidos.
+
+### ⚠️ Migraciones a aplicar en Supabase (no se aplican solas)
+- `20260625000000_block_profile_privilege_escalation.sql`
+- `20260625010000_notifications_es.sql`
+- `20260625020000_deliverable_notifications.sql`
+- `20260625030000_deliverable_comments.sql`
 
 ---
 
