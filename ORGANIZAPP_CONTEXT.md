@@ -1,7 +1,42 @@
 # OrganizAPP — Contexto del Proyecto
 
-**Última actualización:** 2026-06-25  
-**Versión actual:** v0.14.0 — Vista de equipo + bucle de control de agencias
+**Última actualización:** 2026-08-20  
+**Versión actual:** v0.15.0 — Migraciones aplicadas y verificadas en Supabase
+
+---
+
+## Estado real de la base de datos (verificado 2026-08-20)
+
+**Proyecto Supabase:** `OrganizAPP` — ref `lyemnfjzqxypqvvibvtm` (ACTIVE_HEALTHY).
+
+### ✅ Aplicado y verificado en producción
+| Qué | Estado |
+|---|---|
+| `profiles_prevent_privilege_escalation` (trigger) | **Activo** — un usuario NO puede auto-promoverse a admin |
+| `fix_profiles_rls_restrict_sensitive_columns` | Aplicado (segunda capa sobre columnas sensibles) |
+| Notificaciones en español + triggers consolidados | Aplicado (un trigger canónico por evento, sin duplicados) |
+| `deliverable_notification_trigger` | **Activo** — avisa al responsable al asignarse / cambiar estado |
+| Tabla `deliverable_comments` + 4 policies RLS | **Creada** — el panel de comentarios ya funciona |
+| `notifications.type` CHECK | Ampliado con `deliverable_assigned` y `deliverable_status` |
+
+### Bug corregido antes de aplicar (importante)
+La versión original de `20260625020000_deliverable_notifications` insertaba
+tipos (`deliverable_assigned`, `deliverable_status`) que el CHECK de
+`notifications.type` **no admitía**. De haberse aplicado tal cual, cada cambio
+de estado o de responsable de un entregable habría fallado con ROLLBACK.
+Se corrigió: la migración **primero amplía el CHECK** y además envuelve el
+INSERT en un bloque `EXCEPTION` — **un fallo al notificar nunca puede bloquear
+la operación del entregable**. Verificado con una prueba de UPDATE real
+(ejecutada y revertida): pasa sin error.
+
+### Pendiente (avisos del linter de Supabase, no bloqueantes)
+- 3 ERROR `security_definer_view`: `user_search`, `user_email_search`,
+  `project_members_with_profiles`. Cambiarlas a `security_invoker` podría romper
+  la búsqueda de usuarios / gestión de equipo → requiere probar antes.
+- WARN: `search_path` mutable en varias funciones; funciones SECURITY DEFINER
+  ejecutables por `anon`.
+- WARN: **protección de contraseñas filtradas desactivada** en Auth → se activa
+  con un clic en el panel de Supabase (Authentication → Policies).
 
 ---
 
@@ -25,11 +60,11 @@
 - Trigger anti-auto-promoción (`20260625000000`).
 - Notificaciones en español (`20260625010000`), Equipo y campana traducidos.
 
-### ⚠️ Migraciones a aplicar en Supabase (no se aplican solas)
-- `20260625000000_block_profile_privilege_escalation.sql`
-- `20260625010000_notifications_es.sql`
-- `20260625020000_deliverable_notifications.sql`
-- `20260625030000_deliverable_comments.sql`
+### ✅ Migraciones (todas aplicadas — ver "Estado real de la base de datos")
+- `20260625000000_block_profile_privilege_escalation.sql` — aplicada
+- `20260625010000_notifications_es.sql` — aplicada (+ fix de v0 `20260807...`)
+- `20260625020000_deliverable_notifications.sql` — aplicada (corregida antes)
+- `20260625030000_deliverable_comments.sql` — aplicada
 
 ---
 

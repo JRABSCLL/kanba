@@ -15,7 +15,9 @@
 CREATE TABLE IF NOT EXISTS public.deliverable_comments (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   deliverable_id uuid NOT NULL REFERENCES public.production_deliverables(id) ON DELETE CASCADE,
-  user_id        uuid NOT NULL,
+  -- FK a profiles: además de integridad, habilita el embed `profiles:user_id`
+  -- que usa el panel de comentarios para mostrar autor y avatar.
+  user_id        uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   content        text NOT NULL,
   created_at     timestamptz NOT NULL DEFAULT now(),
   updated_at     timestamptz NOT NULL DEFAULT now()
