@@ -30,6 +30,7 @@ export default function NewProjectPage() {
   const [projectSlug, setProjectSlug] = useState('');
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [checkingSlug, setCheckingSlug] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const router = useRouter();
@@ -157,31 +158,35 @@ export default function NewProjectPage() {
       return;
     }
 
-    if (!projectSlug.trim()) {
-      toast.error('Introduce un identificador');
-      return;
-    }
-
-    if (slugAvailable === false) {
-      toast.error('Ese identificador ya está en uso. Elige otro.');
-      return;
-    }
-
-    if (slugAvailable === null || checkingSlug) {
-      toast.error('Espera mientras comprobamos el identificador');
+    if (!projectName.trim()) {
+      toast.error('Ponle un nombre al proyecto');
       return;
     }
 
     setCreating(true);
 
     try {
+      // La dirección web nunca bloquea al usuario: si la que toca ya existe,
+      // se le añade un número (mi-proyecto-2, -3...) hasta encontrar una libre.
+      const base = (projectSlug.trim() || generateSlug(projectName) || 'proyecto');
+      let finalSlug = base;
+      for (let i = 2; i < 50; i++) {
+        const { data: taken } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('slug', finalSlug)
+          .maybeSingle();
+        if (!taken) break;
+        finalSlug = `${base}-${i}`;
+      }
+
       // Create project
       const { data: project, error: projectError } = await supabase
         .from('projects')
         .insert({
           name: projectName,
           description: projectDescription || null,
-          slug: projectSlug.trim(),
+          slug: finalSlug,
           user_id: user!.id,
         })
         .select()
@@ -249,53 +254,47 @@ export default function NewProjectPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="slug">Identificador (slug) *</Label>
-              <div className="relative">
-                <Input
-                  id="slug"
-                  type="text"
-                  placeholder="project-slug"
-                  value={projectSlug}
-                  onChange={(e) => setProjectSlug(e.target.value)}
-                  className={`pr-10 ${
-                    slugAvailable === true ? 'border-green-500' : 
-                    slugAvailable === false ? 'border-red-500' : ''
-                  }`}
-                  required
-                />
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                  {checkingSlug ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                  ) : slugAvailable === true ? (
-                    <div className="text-green-500">✓</div>
-                  ) : slugAvailable === false ? (
-                    <div className="text-red-500">✗</div>
-                  ) : null}
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Se usa en la URL. Solo minúsculas, números y guiones.
-              </p>
-              {slugAvailable === false && (
-                <p className="text-xs text-red-500">
-                  Ese identificador ya está en uso. Elige otro.
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="description">Descripción</Label>
               <Textarea
                 id="description"
-                placeholder="Descripción (opcional)"
+                placeholder="¿De qué trata el proyecto? (opcional)"
                 value={projectDescription}
                 onChange={(e) => setProjectDescription(e.target.value)}
                 rows={4}
               />
             </div>
+
+            {/* La dirección web se genera sola desde el nombre. Solo se muestra
+                a quien la quiera cambiar, para no pedir jerga técnica. */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+              >
+                {showAdvanced ? 'Ocultar' : 'Personalizar'} la dirección web
+              </button>
+              {showAdvanced && (
+                <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                  <Label htmlFor="slug" className="text-xs">Dirección web</Label>
+                  <Input
+                    id="slug"
+                    type="text"
+                    placeholder="mi-proyecto"
+                    value={projectSlug}
+                    onChange={(e) => setProjectSlug(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Solo minúsculas, números y guiones. Si ya existe, se añadirá un número.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="flex gap-3 pt-4">
               <Button
                 type="submit"
-                disabled={creating || !canCreateProject() || slugAvailable !== true || checkingSlug}
+                disabled={creating || !projectName.trim()}
                 className="flex-1"
               >
                 {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

@@ -200,10 +200,13 @@ export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {
                   return (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton
-                        isActive={pathname?.startsWith("/dashboard/projects") || false}
+                        asChild
+                        isActive={pathname === "/dashboard/projects"}
                       >
-                        <FolderIcon className="h-4 w-4" />
-                        <span>{item.title}</span>
+                        <Link href="/dashboard/projects">
+                          <FolderIcon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
                       </SidebarMenuButton>
 
                       <SidebarMenuSub>

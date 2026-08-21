@@ -1,7 +1,39 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-08-20  
-**Versión actual:** v0.15.0 — Migraciones aplicadas y verificadas en Supabase
+**Versión actual:** v0.16.0 — Facilidad de uso + manual de usuario
+
+---
+
+## Cambios v0.16.0 (que cualquiera pueda usarla)
+
+Auditoría de los dos flujos completos buscando fricción para alguien sin
+experiencia. Cinco arreglos:
+
+1. **Crear proyecto sin jerga.** El campo "Identificador (slug)" era jerga
+   técnica y además **bloqueaba el botón de crear** hasta validarse. Ahora está
+   oculto tras "Personalizar la dirección web", y si la dirección ya existe el
+   sistema **añade un número solo** (`mi-proyecto-2`) en vez de bloquear.
+   El botón solo pide que haya nombre.
+2. **Página `/dashboard/projects`** (no existía). El item "Proyectos" del
+   sidebar era un botón que no llevaba a ningún sitio; ahora lista todos los
+   proyectos con buscador. Antes solo se veían 10 en el sidebar.
+3. **Guía de primer uso en Agencias.** Si no hay agencias, se muestran los dos
+   pasos ("1. Crea la agencia → 2. Lanza un plan") con el botón que hace cada
+   cosa, en vez del escueto "Crea una agencia para empezar".
+4. **El camino fácil, señalado.** El formulario largo pasó a llamarse
+   "Crear plan **detallado**" y avisa de que existe **Lanzamiento rápido**
+   (2 campos) para empezar. Antes el formulario de ~16 campos era el camino
+   que la gente encontraba primero.
+5. **Etiquetas coherentes.** "Quick Launch" → "Lanzamiento rápido" (quedaba en
+   inglés en el diálogo). El botón "Crear plan" que en realidad abría la vista
+   de Configuración ahora dice **Configuración**.
+
+### Documentación de usuario
+- **`MANUAL.md`** (nuevo): guía de uso completa en español, escrita para
+  alguien que no ha visto nunca la herramienta. Cubre los dos módulos, el
+  calendario, el equipo, las notificaciones, la parte de administrador y los
+  problemas frecuentes. Enlazado desde el README.
 
 ---
 

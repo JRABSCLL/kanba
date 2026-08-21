@@ -4,6 +4,9 @@ Internal project management and production control system for managing your orga
 
 **Tech Stack:** Next.js 13.5.1, React 18, Supabase, TypeScript, Tailwind CSS, shadcn/ui, @hello-pangea/dnd, TanStack Query
 
+> **¿Vas a usar la herramienta?** Lee [MANUAL.md](MANUAL.md) — guía de uso paso a paso, en español.
+> Este README es para quien la desarrolla. El estado técnico del proyecto está en [ORGANIZAPP_CONTEXT.md](ORGANIZAPP_CONTEXT.md).
+
 ## Features
 
 - **Projects Management** — Internal projects with team collaboration via `project_members`, configurable kanban columns
