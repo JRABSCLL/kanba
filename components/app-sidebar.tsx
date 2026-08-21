@@ -15,6 +15,7 @@ import {
   Building2,
   CalendarDays,
   Users,
+  HelpCircle,
 } from "lucide-react"
 import { useRouter, usePathname } from "next/navigation"
 import { toast } from "sonner"
@@ -74,6 +75,7 @@ const menuItems = [
   { title: "Equipo", url: "/dashboard/team", icon: Users, managerOnly: true },
   { title: "Guardados", url: "/dashboard/bookmarks", icon: Bookmark },
   { title: "Ajustes", url: "/dashboard/settings", icon: SettingsIcon },
+  { title: "Guía de uso", url: "/dashboard/help", icon: HelpCircle },
 ]
 
 export function AppSidebar({ onSignOut, onProjectUpdate }: AppSidebarProps) {

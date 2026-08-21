@@ -1,7 +1,43 @@
 # OrganizAPP — Contexto del Proyecto
 
-**Última actualización:** 2026-08-20  
-**Versión actual:** v0.17.0 — Recuperación de contraseña
+**Última actualización:** 2026-08-21  
+**Versión actual:** v0.18.0 — Modelo de permisos operativo + guía en la app
+
+---
+
+## Cambios v0.18.0 (auditoría de permisos para lanzar)
+
+### El bloqueador que se encontró
+`canManageProduction = isAdmin`. Con **1 admin y 7 internos**, el módulo de
+Agencias era **de un solo usuario**: nadie más podía crear planes, configurar
+etapas ni **mover entregables de etapa**.
+
+Peor aún: el bloqueo visual del arrastre usaba `canEditDeliverable` mientras el
+guardado exigía `canManageProduction`. Un interno arrastraba la tarjeta, la
+soltaba **y volvía sola sin ningún mensaje** — parecía que la app fallaba.
+
+### Modelo nuevo
+| | Admin | Interno | Agencia |
+|---|---|---|---|
+| Crear agencias / marcas | Sí | Sí | No |
+| Crear planes, etapas, lanzamiento rápido | Sí | Sí | No |
+| Crear entregables | Sí | Sí | Sí (en un plan existente) |
+| Editar y mover entregables | Todos | Todos | **Solo los de su agencia** |
+| Eliminar entregables | Sí | Sí | No |
+
+- `canManageStructure` = admin + interno (agencias y marcas).
+- `canManageProduction` = admin + interno (planes, etapas).
+- `canEditDeliverable`: admin/interno todo; agencia los de `agency_id` propio
+  (antes solo los que ella creó, lo que le impedía reportar su propio avance).
+- `handleDragEnd` y `moveDeliverableToStage` ahora comprueban el **mismo**
+  permiso que el bloqueo visual, sobre el entregable concreto.
+
+### Guía dentro de la app
+- `app/dashboard/help/page.tsx` — **Guía de uso** en el menú lateral, visible
+  para todos. Secciones plegables con buscador: qué es cada módulo, Proyectos,
+  Agencias, la diferencia entre etapa y estado, entregables, calendario y
+  equipo, tabla de permisos, alta de usuarios (solo admin) y problemas
+  frecuentes. Mismo contenido que `MANUAL.md`, pero sin salir de la herramienta.
 
 ---
 

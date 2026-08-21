@@ -3,6 +3,24 @@
 Guía de uso. Está escrita para que cualquiera pueda usar la herramienta sin
 que nadie se lo explique.
 
+> Este mismo contenido está **dentro de la aplicación**, en el menú lateral →
+> **Guía de uso**. Dile a tu equipo que lo busque ahí; no necesitan entrar aquí.
+
+## Quién puede hacer qué
+
+| | Admin | Interno | Agencia |
+|---|---|---|---|
+| Crear agencias, marcas y planes | Sí | Sí | No |
+| Configurar etapas | Sí | Sí | No |
+| Crear entregables | Sí | Sí | Sí (dentro de un plan) |
+| Editar y mover entregables | Todos | Todos | Solo los de su agencia |
+| Eliminar entregables | Sí | Sí | No |
+| Ver otras agencias | Sí | Sí | No |
+| Gestionar usuarios | Sí | No | No |
+
+Un usuario de **agencia** solo ve su propia agencia. En Proyectos, solo ve
+aquellos a los que se le haya invitado expresamente.
+
 ---
 
 ## Qué es

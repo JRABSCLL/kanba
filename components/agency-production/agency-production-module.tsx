@@ -272,25 +272,33 @@ export function AgencyProductionModule() {
   const isInternal = user?.user_type === "internal" && user?.is_active === true
   const isAgency = user?.user_type === "agency" && user?.is_active === true
   
-  // Can user manage (create/delete/edit structure)
-  const canManageProduction = isAdmin
-  
-  // Can user create deliverables (admin, internal, or agency for their own)
+  // ── Modelo de permisos ────────────────────────────────────────────────────
+  // Estructura (agencias y marcas): admin e internos. El equipo interno también
+  // da de alta proveedores y marcas; no tiene sentido que dependan del admin.
+  const canManageStructure = isAdmin || isInternal
+
+  // Operar la producción (planes, etapas, lanzamiento rápido): admin + internos.
+  // Los internos son el equipo que gestiona el día a día; sin esto el módulo
+  // sería de un solo usuario.
+  const canManageProduction = isAdmin || isInternal
+
+  // Crear entregables: también la agencia, pero solo dentro de un plan que ya
+  // exista (el encargo lo define el cliente, no el proveedor).
   const canCreateDeliverable = isAdmin || isInternal || isAgency
-  
-  // Can user edit a specific deliverable
+
+  // Editar un entregable concreto.
   const canEditDeliverable = (deliverable: Deliverable): boolean => {
-    if (isAdmin) return true // Admin can edit anything
-    if (isInternal) {
-      // Internal can edit if they created it or are responsible for it
-      return deliverable.created_by === user?.id || deliverable.responsible_internal_id === user?.id
-    }
-    if (isAgency) {
-      // Agency can edit only if they created it
-      return deliverable.created_by === user?.id
-    }
+    if (isAdmin || isInternal) return true
+    // La agencia reporta el avance de SUS entregables (estado, link, fecha),
+    // no solo de los que creó ella.
+    if (isAgency) return !!user?.agency_id && deliverable.agency_id === user.agency_id
     return false
   }
+
+  // Mover de etapa = mismo permiso que editar. Antes exigía ser admin mientras
+  // la tarjeta SÍ se veía arrastrable para otros: se arrastraba y volvía sola
+  // sin explicación.
+  const canMoveDeliverable = canEditDeliverable
   
   // Can user see a plan (admin sees all, internal sees all, agency sees only their agency)
   const canSeePlan = (planAgencyId: string): boolean => {
@@ -531,7 +539,7 @@ export function AgencyProductionModule() {
 
   async function createAgency(event: FormEvent) {
     event.preventDefault()
-    if (!canManageProduction) return toast.error("Solo admins pueden crear agencias")
+    if (!canManageStructure) return toast.error("Solo un administrador puede crear agencias")
     if (!agencyForm.name.trim()) return
     setCreatingAgency(true)
     try {
@@ -556,7 +564,7 @@ export function AgencyProductionModule() {
 
   async function createBrand(event: FormEvent) {
     event.preventDefault()
-    if (!canManageProduction) return toast.error("Solo admins pueden crear marcas")
+    if (!canManageStructure) return toast.error("Solo un administrador puede crear marcas")
     if (!brandForm.name.trim()) return
     setCreatingBrand(true)
     try {
@@ -578,7 +586,7 @@ export function AgencyProductionModule() {
 
   async function createPlan(event: FormEvent) {
     event.preventDefault()
-    if (!canManageProduction) return toast.error("Solo admins pueden crear planes")
+    if (!canManageProduction) return toast.error("No tienes permiso para crear planes")
     if (!planForm.name.trim() || !planForm.agency_id) return toast.error("El plan necesita nombre y agencia")
 
     const normalizedItems = draftItems.map((item) => ({ ...item, quantity: Number.parseInt(item.target_quantity, 10) }))
@@ -768,7 +776,8 @@ export function AgencyProductionModule() {
   }
 
   async function moveDeliverableToStage(deliverableId: string, newStageId: string | null) {
-    if (!canManageProduction) return
+    const target = deliverables.find((d) => d.id === deliverableId)
+    if (!target || !canEditDeliverable(target)) return
     try {
       const { error } = await supabase.from("production_deliverables")
         .update({ stage_id: newStageId })
@@ -824,8 +833,13 @@ export function AgencyProductionModule() {
 
   // Drag and drop handler for kanban
   const handleDragEnd = useCallback(async (result: DropResult) => {
-    if (!result.destination || !canManageProduction) return
-    
+    if (!result.destination) return
+
+    // El permiso se comprueba sobre el entregable concreto, igual que el
+    // bloqueo visual del arrastre, para que no haya desajuste.
+    const dragged = deliverables.find((d) => d.id === result.draggableId)
+    if (!dragged || !canEditDeliverable(dragged)) return
+
     const deliverableId = result.draggableId
     const newStageId = result.destination.droppableId === "unassigned" ? null : result.destination.droppableId
     
@@ -843,7 +857,8 @@ export function AgencyProductionModule() {
       await loadData()
       toast.error("No se pudo mover el entregable")
     }
-  }, [canManageProduction])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deliverables, isAdmin, isInternal, isAgency, user?.agency_id])
 
   function openCreateStageDialog() {
     setEditingStage(null)
@@ -1359,6 +1374,7 @@ export function AgencyProductionModule() {
       {activeView === "setup" && (
         canManageProduction ? (
           <SetupView
+            canManageStructure={canManageStructure}
             agencies={agencies}
             brands={brands}
             agencyForm={agencyForm}
@@ -2178,6 +2194,7 @@ function QuickLaunchDialog({ open, onClose, agencies, templates, onLaunch, launc
 
 function SetupView(props: any) {
   const { 
+    canManageStructure,
     agencies, brands, 
     agencyForm, setAgencyForm, 
     brandForm, setBrandForm, 
@@ -2189,9 +2206,9 @@ function SetupView(props: any) {
   const updateDraft = (id: string, changes: Partial<PlanItemDraft>) => setDraftItems((prev: PlanItemDraft[]) => prev.map((item) => item.local_id === id ? { ...item, ...changes } : item))
   const removeDraft = (id: string) => setDraftItems((prev: PlanItemDraft[]) => prev.length === 1 ? prev : prev.filter((item) => item.local_id !== id))
 
-  return <div className="grid gap-6 xl:grid-cols-[0.7fr_0.7fr_1.6fr]">
-    <Card><CardHeader><CardTitle>Nueva agencia</CardTitle><CardDescription>Agrega proveedores o agencias externas.</CardDescription></CardHeader><CardContent><form onSubmit={createAgency} className="space-y-3"><Field label="Nombre"><Input value={agencyForm.name} onChange={(e) => setAgencyForm({ ...agencyForm, name: e.target.value })} placeholder="Agencia / proveedor" required /></Field><Field label="Tipo"><Input value={agencyForm.type} onChange={(e) => setAgencyForm({ ...agencyForm, type: e.target.value })} placeholder="Video, diseño, social media..." /></Field><Field label="Contacto"><Input value={agencyForm.contact_name} onChange={(e) => setAgencyForm({ ...agencyForm, contact_name: e.target.value })} placeholder="Nombre de contacto" /></Field><Field label="Email"><Input type="email" value={agencyForm.contact_email} onChange={(e) => setAgencyForm({ ...agencyForm, contact_email: e.target.value })} placeholder="contacto@agencia.com" /></Field><Field label="Notas"><Textarea value={agencyForm.notes} onChange={(e) => setAgencyForm({ ...agencyForm, notes: e.target.value })} placeholder="Notas internas" /></Field><Button type="submit" className="w-full" disabled={creatingAgency}>{creatingAgency && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Crear agencia</Button></form></CardContent></Card>
-    <Card><CardHeader><CardTitle>Nueva marca</CardTitle><CardDescription>Opcional, para organizar por cliente o marca.</CardDescription></CardHeader><CardContent><form onSubmit={createBrand} className="space-y-3"><Field label="Nombre"><Input value={brandForm.name} onChange={(e) => setBrandForm({ ...brandForm, name: e.target.value })} placeholder="SAIA LABS / Cliente" required /></Field><Field label="Descripción"><Textarea value={brandForm.description} onChange={(e) => setBrandForm({ ...brandForm, description: e.target.value })} placeholder="Notas de la marca" /></Field><Button type="submit" className="w-full" disabled={creatingBrand}>{creatingBrand && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Crear marca</Button></form></CardContent></Card>
+  return <div className={`grid gap-6 ${canManageStructure ? "xl:grid-cols-[0.7fr_0.7fr_1.6fr]" : ""}`}>
+    {canManageStructure && <Card><CardHeader><CardTitle>Nueva agencia</CardTitle><CardDescription>Agrega proveedores o agencias externas.</CardDescription></CardHeader><CardContent><form onSubmit={createAgency} className="space-y-3"><Field label="Nombre"><Input value={agencyForm.name} onChange={(e) => setAgencyForm({ ...agencyForm, name: e.target.value })} placeholder="Agencia / proveedor" required /></Field><Field label="Tipo"><Input value={agencyForm.type} onChange={(e) => setAgencyForm({ ...agencyForm, type: e.target.value })} placeholder="Video, diseño, social media..." /></Field><Field label="Contacto"><Input value={agencyForm.contact_name} onChange={(e) => setAgencyForm({ ...agencyForm, contact_name: e.target.value })} placeholder="Nombre de contacto" /></Field><Field label="Email"><Input type="email" value={agencyForm.contact_email} onChange={(e) => setAgencyForm({ ...agencyForm, contact_email: e.target.value })} placeholder="contacto@agencia.com" /></Field><Field label="Notas"><Textarea value={agencyForm.notes} onChange={(e) => setAgencyForm({ ...agencyForm, notes: e.target.value })} placeholder="Notas internas" /></Field><Button type="submit" className="w-full" disabled={creatingAgency}>{creatingAgency && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Crear agencia</Button></form></CardContent></Card>}
+    {canManageStructure && <Card><CardHeader><CardTitle>Nueva marca</CardTitle><CardDescription>Opcional, para organizar por cliente o marca.</CardDescription></CardHeader><CardContent><form onSubmit={createBrand} className="space-y-3"><Field label="Nombre"><Input value={brandForm.name} onChange={(e) => setBrandForm({ ...brandForm, name: e.target.value })} placeholder="SAIA LABS / Cliente" required /></Field><Field label="Descripción"><Textarea value={brandForm.description} onChange={(e) => setBrandForm({ ...brandForm, description: e.target.value })} placeholder="Notas de la marca" /></Field><Button type="submit" className="w-full" disabled={creatingBrand}>{creatingBrand && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Crear marca</Button></form></CardContent></Card>}
     <Card><CardHeader><CardTitle>Crear plan detallado</CardTitle><CardDescription>Para planes a medida (cantidades, piezas específicas o una mezcla). Si solo quieres empezar rápido, usa <strong>Lanzamiento rápido</strong> desde el panel: pide solo agencia y plantilla.</CardDescription></CardHeader><CardContent><form onSubmit={createPlan} className="space-y-5"><div className="grid gap-3 md:grid-cols-2"><Field label="Nombre del plan" className="md:col-span-2"><Input value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} placeholder="Social media mensual - Mayo" required /></Field><Field label="Agencia"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={planForm.agency_id} onChange={(e) => setPlanForm({ ...planForm, agency_id: e.target.value })} required><option value="">Seleccionar</option>{agencies.map((agency: Agency) => <option key={agency.id} value={agency.id}>{agency.name}</option>)}</select></Field><Field label="Marca"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={planForm.brand_id} onChange={(e) => setPlanForm({ ...planForm, brand_id: e.target.value })}><option value="">Sin marca</option>{brands.map((brand: Brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></Field><Field label="Responsable interno" className="md:col-span-2"><UserSearchField searchTerm={userSearchTerm} setSearchTerm={setUserSearchTerm} searchResults={userSearchResults} searching={searchingUsers} selectedUser={selectedResponsible} onSelectUser={setSelectedResponsible} onClearUser={() => setSelectedResponsible(null)} placeholder="Buscar usuario por email o nombre..." /></Field><Field label="Tipo de periodo"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={planForm.period_type} onChange={(e) => setPlanForm({ ...planForm, period_type: e.target.value })}><option value="monthly">Mensual</option><option value="weekly">Semanal</option><option value="campaign">Campaña</option><option value="custom">Personalizado</option></select></Field><Field label="Fechas"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={planForm.date_strategy} onChange={(e) => setPlanForm({ ...planForm, date_strategy: e.target.value })}><option value="distributed">Distribuir automáticamente</option><option value="same_end">Misma fecha final para todos</option><option value="none">Sin fechas por ahora</option></select></Field><Field label="Inicio"><Input type="date" value={planForm.period_start} onChange={(e) => setPlanForm({ ...planForm, period_start: e.target.value })} required /></Field><Field label="Fin"><Input type="date" value={planForm.period_end} onChange={(e) => setPlanForm({ ...planForm, period_end: e.target.value })} required /></Field><Field label="Notas" className="md:col-span-2"><Textarea value={planForm.notes} onChange={(e) => setPlanForm({ ...planForm, notes: e.target.value })} placeholder="Brief o notas internas del plan" /></Field></div><div className="space-y-3"><div className="flex items-center justify-between"><div><Label>Ítems del plan</Label><p className="text-xs text-muted-foreground">Agrega 30 videos, piezas específicas o un plan mixto.</p></div><Button type="button" size="sm" variant="outline" onClick={() => setDraftItems([...draftItems, newPlanItemDraft()])}><Plus className="mr-2 h-3 w-3" />Agregar ítem</Button></div>{draftItems.map((item: PlanItemDraft, index: number) => <div key={item.local_id} className="rounded-xl border p-3"><div className="mb-3 flex items-center justify-between"><span className="text-sm font-medium">Ítem {index + 1}</span><Button type="button" size="sm" variant="ghost" onClick={() => removeDraft(item.local_id)} disabled={draftItems.length === 1}><Trash2 className="h-3 w-3" /></Button></div><div className="grid gap-3 md:grid-cols-3"><Field label="Tipo"><Input list="deliverable-types" value={item.deliverable_type} onChange={(e) => updateDraft(item.local_id, { deliverable_type: e.target.value })} required /><datalist id="deliverable-types">{DEFAULT_TYPES.map((type) => <option key={type} value={type} />)}</datalist></Field><Field label="Cantidad"><Input type="number" min="1" max="250" value={item.target_quantity} onChange={(e) => updateDraft(item.local_id, { target_quantity: e.target.value })} required /></Field><Field label="Nombres"><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={item.naming_mode} onChange={(e) => updateDraft(item.local_id, { naming_mode: e.target.value as PlanItemDraft["naming_mode"] })}><option value="numbered">Nombre base + número</option><option value="same">Mismo nombre para todos</option></select></Field><Field label="Nombre base"><Input value={item.title_base} onChange={(e) => updateDraft(item.local_id, { title_base: e.target.value })} placeholder="Video, Copy LinkedIn, Reporte mensual..." /></Field><Field label="Canal"><Input value={item.channel} onChange={(e) => updateDraft(item.local_id, { channel: e.target.value })} placeholder="Instagram, TikTok, LinkedIn" /></Field><Field label="Formato"><Input value={item.format} onChange={(e) => updateDraft(item.local_id, { format: e.target.value })} placeholder="1080x1920, texto, PDF/link" /></Field><Field label="Notas" className="md:col-span-3"><Textarea value={item.notes} onChange={(e) => updateDraft(item.local_id, { notes: e.target.value })} placeholder="Notas para este tipo de entregable" /></Field></div></div>)}</div><Button type="submit" className="w-full" disabled={creatingPlan || agencies.length === 0}>{creatingPlan && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Crear plan y generar entregables</Button>{agencies.length === 0 && <p className="text-xs text-muted-foreground">Primero crea al menos una agencia.</p>}</form></CardContent></Card>
   </div>
 }
