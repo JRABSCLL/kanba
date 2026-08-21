@@ -29,6 +29,16 @@ Puedes usar solo uno de los dos si es lo que necesitas.
 > Si llevas rato esperando, pídele al administrador que te active. Él lo hace
 > en un clic. No es un fallo de la aplicación.
 
+### Si olvidas la contraseña
+
+1. En la pantalla de entrada, pulsa **¿Olvidaste tu contraseña?**
+2. Escribe tu correo y pulsa **Enviar enlace**.
+3. Te llega un correo. Abre el enlace y escribe tu contraseña nueva dos veces.
+4. Vuelve a entrar con la contraseña nueva.
+
+El enlace **dura 1 hora y solo sirve una vez**. Si caduca, pide otro desde la
+misma pantalla. Si no ves el correo, mira en la carpeta de spam.
+
 ### El menú de la izquierda
 
 - **Inicio** — resumen: tus proyectos y tus tareas asignadas.
@@ -254,6 +264,14 @@ Tres costumbres marcan la diferencia:
 **"Me registré y no puedo entrar."**
 Tu cuenta está pendiente. Un administrador tiene que aprobarla en Admin →
 Usuarios.
+
+**"Olvidé mi contraseña."**
+Pulsa **¿Olvidaste tu contraseña?** en la pantalla de entrada. Te llega un
+enlace al correo para poner una nueva. Dura 1 hora.
+
+**"El enlace del correo dice que ya no sirve."**
+Los enlaces caducan en 1 hora y solo valen una vez. Pide otro desde la misma
+pantalla.
 
 **"El calendario está vacío."**
 Solo salen las cosas con fecha límite. Ponles fecha.

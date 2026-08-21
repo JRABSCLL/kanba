@@ -1,7 +1,32 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-08-20  
-**Versión actual:** v0.16.0 — Facilidad de uso + manual de usuario
+**Versión actual:** v0.17.0 — Recuperación de contraseña
+
+---
+
+## Cambios v0.17.0 (recuperación de contraseña)
+
+**El hueco:** no existía ninguna forma de recuperar la contraseña. El login
+tenía un enlace a `/forgot-password`, pero esa página **nunca existió** (404);
+se quitó el enlace roto sin construir la página. Resultado: quien olvidaba la
+contraseña quedaba bloqueado y solo un admin podía resolverlo a mano desde
+Supabase.
+
+**Implementado:**
+- `app/forgot-password/page.tsx` — pide el correo y llama a
+  `resetPasswordForEmail` con `redirectTo` a `/reset-password`. Muestra el
+  mismo mensaje exista o no la cuenta (no revela qué correos están registrados).
+- `app/reset-password/page.tsx` — donde aterriza el enlace del correo. Espera a
+  que supabase-js canjee el token (escucha `PASSWORD_RECOVERY` + reintento a
+  los 2,5 s); si no hay sesión, muestra "enlace caducado" con salida clara.
+  Valida longitud mínima y que ambas contraseñas coincidan, y cierra la sesión
+  de recuperación al terminar para forzar entrar con la nueva.
+- Enlace **¿Olvidaste tu contraseña?** de vuelta en el login (ahora sí apunta a
+  una página real).
+
+Verificado con navegador: ambas pantallas renderizan, el estado "enlace
+inválido" se detecta y no hay errores de JS.
 
 ---
 
