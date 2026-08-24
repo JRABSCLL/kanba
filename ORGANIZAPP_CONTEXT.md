@@ -5,12 +5,26 @@
 
 ---
 
-## ⏳ PENDIENTE DE APLICAR EN SUPABASE
+## ✅ APLICADA Y VERIFICADA EN SUPABASE (2026-08-21)
 
 `supabase/migrations/20260821000000_fix_agency_module_rls.sql`
 
-**Escrita y revisada, NO aplicada** (Supabase se desconectó al terminarla).
-Hasta que se aplique, siguen los tres fallos de abajo.
+Aplicada al proyecto `lyemnfjzqxypqvvibvtm`. Verificada simulando usuarios
+reales (`request.jwt.claims` + rol `authenticated`) dentro de una transacción
+revertida:
+
+| Prueba | Resultado |
+|---|---|
+| Admin crea agencia | OK |
+| Admin crea marca | OK |
+| Interno crea agencia | OK |
+| **Interno crea plan** (antes imposible) | OK |
+| Interno lee agencias | OK |
+
+Datos intactos tras la prueba (0 filas de prueba dejadas). Todas las tablas del
+módulo tienen ya políticas de lectura **y** escritura.
+
+Los tres fallos que resolvía:
 
 ### Fallo 1 — No se pueden crear agencias ni marcas (bloqueante)
 Síntoma real: `new row violates row-level security policy for table "agencies"`.
