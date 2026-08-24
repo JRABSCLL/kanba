@@ -279,6 +279,12 @@ Tres costumbres marcan la diferencia:
 
 ## Problemas frecuentes
 
+**"Al crear una agencia me sale «new row violates row-level security policy»."**
+No es culpa de los campos (solo el nombre es obligatorio). Es un permiso que
+falta en la base de datos. Se arregla aplicando la migración
+`20260821000000_fix_agency_module_rls.sql`. Mientras tanto, las agencias hay
+que crearlas desde el panel de Supabase.
+
 **"Me registré y no puedo entrar."**
 Tu cuenta está pendiente. Un administrador tiene que aprobarla en Admin →
 Usuarios.

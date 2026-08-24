@@ -1,7 +1,44 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-08-21  
-**Versión actual:** v0.18.0 — Modelo de permisos operativo + guía en la app
+**Versión actual:** v0.19.0 — RLS del módulo de agencias (migración pendiente de aplicar)
+
+---
+
+## ⏳ PENDIENTE DE APLICAR EN SUPABASE
+
+`supabase/migrations/20260821000000_fix_agency_module_rls.sql`
+
+**Escrita y revisada, NO aplicada** (Supabase se desconectó al terminarla).
+Hasta que se aplique, siguen los tres fallos de abajo.
+
+### Fallo 1 — No se pueden crear agencias ni marcas (bloqueante)
+Síntoma real: `new row violates row-level security policy for table "agencies"`.
+
+`agencies` y `brands` tienen RLS activo pero **solo una política de SELECT**.
+Sin política de INSERT, Postgres rechaza toda alta. No tiene nada que ver con
+los campos del formulario: el único obligatorio es `name`. La agencia que
+existe se creó desde el panel de Supabase (service role salta el RLS).
+
+### Fallo 2 — Los internos no pueden crear planes
+La política de `production_plans` exige
+`agency_id = get_user_agency_id(uid)`, y un interno **no tiene agencia**
+(`agency_id` NULL) → la comparación da NULL y nunca pasa. Solo el admin podía.
+Contradice el modelo de permisos de la interfaz introducido en v0.18.0: la UI
+da permiso al interno y la BD se lo niega.
+
+### Fallo 3 — El aislamiento entre agencias no funciona
+Conviven políticas nuevas que filtran por agencia con otras viejas
+(`approved users can read X`) que dan acceso sin filtrar. Las permisivas se
+combinan con **OR**, así que las viejas anulan a las nuevas. Hoy sin impacto
+(0 usuarios de agencia), pero es bloqueante antes de dar acceso a una agencia.
+
+### Verificación al aplicar
+1. Comprobar que la columna de `production_plan_items` y
+   `production_plan_stages` que apunta al plan se llama `plan_id` (la migración
+   lo asume, tomado del código del módulo).
+2. Crear una agencia y una marca simulando un usuario interno, y revertir.
+3. Confirmar que un usuario de agencia no ve datos de otras agencias.
 
 ---
 
