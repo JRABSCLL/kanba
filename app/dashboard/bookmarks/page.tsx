@@ -125,12 +125,12 @@ export default function BookmarksPage() {
   return (
     <>
       <div className="flex justify-between items-center mb-8">
-      <h1 className="text-2xl font-bold">Bookmarks</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Guardados</h1>
       <div className="mb-6">
           <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search bookmarks..."
+            placeholder="Buscar…"
           />
         </div>
       </div>
@@ -140,7 +140,7 @@ export default function BookmarksPage() {
           <Input
             value={url}
             onChange={e => setUrl(e.target.value)}
-            placeholder="Enter website URL"
+            placeholder="Pega una dirección web"
             disabled={adding}
           />
           <Button onClick={handleAddBookmark} disabled={adding || !url.trim()}>
@@ -149,7 +149,7 @@ export default function BookmarksPage() {
         </div>
         {error && <div className="text-red-500 text-sm mb-4">{error}</div>}
         <div className="space-y-8">
-          {Object.keys(grouped).length === 0 && <div className="text-muted-foreground">No bookmarks yet.</div>}
+          {Object.keys(grouped).length === 0 && <div className="text-muted-foreground">Aún no has guardado nada.</div>}
           {Object.entries(grouped).map(([date, items]) => (
             <div key={date}>
               <div className="font-semibold text-base text-muted-foreground mb-2">{date}</div>

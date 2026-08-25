@@ -73,7 +73,7 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
       setComments(comments || []);
     } catch (error: any) {
       console.error('Error loading comments:', error);
-      toast.error('Failed to load comments');
+      toast.error('No se pudieron cargar los comentarios');
     } finally {
       setLoading(false);
     }
@@ -83,7 +83,7 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
     e.preventDefault();
     
     if (!newComment.trim()) {
-      toast.error('Please enter a comment');
+      toast.error('Escribe un comentario');
       return;
     }
 
@@ -102,10 +102,10 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
 
       setNewComment('');
       await loadComments();
-      toast.success('Comment added successfully!');
+      toast.success('Comentario añadido');
     } catch (error: any) {
       console.error('Error adding comment:', error);
-      toast.error('Failed to add comment');
+      toast.error('No se pudo añadir el comentario');
     } finally {
       setSubmitting(false);
     }
@@ -113,7 +113,7 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
 
   const handleEditComment = async (commentId: string) => {
     if (!editContent.trim()) {
-      toast.error('Please enter a comment');
+      toast.error('Escribe un comentario');
       return;
     }
 
@@ -131,15 +131,15 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
       setEditingComment(null);
       setEditContent('');
       await loadComments();
-      toast.success('Comment updated successfully!');
+      toast.success('Comentario actualizado');
     } catch (error: any) {
       console.error('Error updating comment:', error);
-      toast.error('Failed to update comment');
+      toast.error('No se pudo actualizar el comentario');
     }
   };
 
   const handleDeleteComment = async (commentId: string) => {
-    if (!confirm('Are you sure you want to delete this comment?')) {
+    if (!confirm('¿Eliminar este comentario?')) {
       return;
     }
 
@@ -152,10 +152,10 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
       if (error) throw error;
 
       await loadComments();
-      toast.success('Comment deleted successfully!');
+      toast.success('Comentario eliminado');
     } catch (error: any) {
       console.error('Error deleting comment:', error);
-      toast.error('Failed to delete comment');
+      toast.error('No se pudo eliminar el comentario');
     }
   };
 
@@ -176,9 +176,9 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
 
     if (diffInHours < 1) {
       const diffInMinutes = Math.floor(diffInHours * 60);
-      return diffInMinutes <= 1 ? 'Just now' : `${diffInMinutes} minutes ago`;
+      return diffInMinutes <= 1 ? 'Ahora' : `hace ${diffInMinutes} min`;
     } else if (diffInHours < 24) {
-      return `${Math.floor(diffInHours)} hours ago`;
+      return `hace ${Math.floor(diffInHours)} h`;
     } else {
       return date.toLocaleDateString();
     }
@@ -190,7 +190,7 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
         <CardHeader>
           <CardTitle className="flex items-center text-lg">
             <MessageSquare className="h-5 w-5 mr-2" />
-            Comments
+            Comentarios
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -207,17 +207,17 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
       <CardHeader>
         <CardTitle className="flex items-center text-lg">
           <MessageSquare className="h-5 w-5 mr-2" />
-          Comments ({comments.length})
+          Comentarios ({comments.length})
         </CardTitle>
         <CardDescription>
-          Discuss this task with your team
+          Comenta esta tarea con tu equipo
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Add Comment Form */}
         <form onSubmit={handleSubmitComment} className="space-y-3">
           <Textarea
-            placeholder="Add a comment..."
+            placeholder="Escribe un comentario…"
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             rows={3}
@@ -227,7 +227,7 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
             <Button type="submit" disabled={submitting || !newComment.trim()}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Send className="mr-2 h-4 w-4" />
-              Add Comment
+              Comentar
             </Button>
           </div>
         </form>
@@ -254,7 +254,7 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {formatDate(comment.created_at)}
-                      {comment.updated_at !== comment.created_at && ' (edited)'}
+                      {comment.updated_at !== comment.created_at && ' (editado)'}
                     </span>
                   </div>
                   
@@ -268,14 +268,14 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => startEditing(comment)}>
                           <Edit className="h-4 w-4 mr-2" />
-                          Edit
+                          Editar
                         </DropdownMenuItem>
                         <DropdownMenuItem 
                           onClick={() => handleDeleteComment(comment.id)}
                           className="text-destructive"
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
+                          Eliminar
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -296,10 +296,10 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
                         onClick={() => handleEditComment(comment.id)}
                         disabled={!editContent.trim()}
                       >
-                        Save
+                        Guardar
                       </Button>
                       <Button size="sm" variant="outline" onClick={cancelEditing}>
-                        Cancel
+                        Cancelar
                       </Button>
                     </div>
                   </div>
@@ -315,8 +315,8 @@ export function TaskComments({ taskId, currentUserId }: TaskCommentsProps) {
           {comments.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No comments yet</p>
-              <p className="text-sm">Be the first to comment on this task</p>
+              <p>Aún no hay comentarios</p>
+              <p className="text-sm">Sé el primero en comentar</p>
             </div>
           )}
         </div>

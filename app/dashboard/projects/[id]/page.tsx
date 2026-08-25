@@ -1362,9 +1362,9 @@ export default function ProjectPage() {
       <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Project Share</DialogTitle>
+            <DialogTitle>Compartir proyecto</DialogTitle>
             <DialogDescription>
-You can share this link with everyone to see your board.
+Cualquiera con este enlace podrá ver el tablero (solo lectura).
            </DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2 mt-4">

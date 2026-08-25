@@ -73,7 +73,7 @@ export function ActivityFeed({ projectId, limit = 20 }: ActivityFeedProps) {
       setActivities(activities || []);
     } catch (error: any) {
       console.error('Error loading activities:', error);
-      toast.error('Failed to load activity feed');
+      toast.error('No se pudo cargar la actividad');
     } finally {
       setLoading(false);
     }
@@ -143,11 +143,11 @@ export function ActivityFeed({ projectId, limit = 20 }: ActivityFeedProps) {
 
     if (diffInHours < 1) {
       const diffInMinutes = Math.floor(diffInHours * 60);
-      return diffInMinutes <= 1 ? 'Just now' : `${diffInMinutes}m ago`;
+      return diffInMinutes <= 1 ? 'Ahora' : `hace ${diffInMinutes} min`;
     } else if (diffInHours < 24) {
-      return `${Math.floor(diffInHours)}h ago`;
+      return `hace ${Math.floor(diffInHours)} h`;
     } else if (diffInHours < 168) { // 7 days
-      return `${Math.floor(diffInHours / 24)}d ago`;
+      return `hace ${Math.floor(diffInHours / 24)} d`;
     } else {
       return date.toLocaleDateString();
     }
@@ -159,7 +159,7 @@ export function ActivityFeed({ projectId, limit = 20 }: ActivityFeedProps) {
         <CardHeader>
           <CardTitle className="flex items-center">
             <Activity className="h-5 w-5 mr-2" />
-            Recent Activity
+            Actividad reciente
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -220,7 +220,7 @@ export function ActivityFeed({ projectId, limit = 20 }: ActivityFeedProps) {
           {activities.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No activity yet</p>
+              <p>Aún no hay actividad</p>
               <p className="text-sm">Activity will appear here as your team works on the project</p>
             </div>
           )}
