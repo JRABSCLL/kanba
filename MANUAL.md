@@ -44,8 +44,8 @@ Puedes usar solo uno de los dos si es lo que necesitas.
    normal: un administrador tiene que darte acceso.
 4. Cuando te aprueben, entra con tu correo y contraseña.
 
-> Si llevas rato esperando, pídele al administrador que te active. Él lo hace
-> en un clic. No es un fallo de la aplicación.
+> Nadie recibe correo automático. Cuando te registres, avisa al administrador
+> de que estás esperando. No es un fallo de la aplicación.
 
 ### Si olvidas la contraseña
 
@@ -250,19 +250,58 @@ Puedes marcarlas como leídas una a una o todas de golpe.
 
 ## Para el administrador
 
-### Aprobar usuarios
+### Cómo se crean las cuentas
 
-**Admin** → **Usuarios**. Ahí ves a quien está esperando entrar y lo activas.
-Mientras no lo hagas, esa persona no puede usar la aplicación.
+**Tú no creas cuentas.** Cada persona se crea la suya, y tú decides dos cosas
+sobre ella: **si entra** y **si es de los tuyos o de fuera**.
 
-### Tipos de usuario
+El registro es idéntico para todo el mundo. Un empleado tuyo y el contacto de
+una agencia hacen exactamente lo mismo: entran en la web, pulsan **Crear
+cuenta** y ponen nombre, correo y contraseña. La aplicación todavía no sabe
+quién es cada uno.
 
-- **Admin** — puede todo: crear agencias, planes, aprobar usuarios.
-- **Interno** — trabaja en proyectos y supervisa entregables.
-- **Agencia** — es un contacto externo. **Solo ve los datos de su propia
-  agencia**, nada del resto.
+Los dos quedan esperando en **Admin → Usuarios → pestaña Inactivos**, y ahí es
+donde entras tú.
 
-Asigna el tipo desde la misma pantalla de Usuarios.
+### Dar de alta a alguien
+
+1. Pulsa **Activar** en su fila.
+2. Se abre una ventana que te obliga a elegir **antes** de dejarle entrar:
+   - **Interno** — es de tu equipo.
+   - **De agencia** — es un contacto externo. Eliges además de cuál.
+3. Confirma. Ya puede entrar, y ya tiene el nivel de acceso correcto.
+
+> **Crea la agencia antes.** Si vas a dar de alta al contacto de PANAL, la
+> agencia PANAL tiene que existir ya en *Producción de Agencias*. Si no, no te
+> aparecerá para elegirla.
+
+**Nadie recibe correo en ningún momento**: ni a ti te avisa cuando alguien se
+registra, ni a la persona cuando la apruebas. Entra a mirar de vez en cuando y
+escríbele tú.
+
+### Corregir el tipo más tarde
+
+En la pestaña **Activos**, cada fila tiene un desplegable con `Interno` y las
+agencias. Cámbialo cuando quieras: el acceso se ajusta al instante.
+
+### Qué cambia según el tipo
+
+| | **Interno** | **De agencia** |
+|---|---|---|
+| Ve las agencias | Todas | **Solo la suya** |
+| Ve planes y entregables | Todos | Solo los de su agencia |
+| Crear agencias, planes, etapas | Sí | No |
+| Entregables | Todos | Solo los de su agencia |
+| Módulo **Equipo** | Sí | No |
+| Proyectos | Los suyos | Solo si le invitas a uno |
+
+Aparte del tipo está el **rol de admin**, que es independiente: se da con el
+botón *Hacer admin* y añade la gestión de usuarios. Un admin es siempre
+interno.
+
+> Esta separación no es solo visual. Está aplicada en la base de datos con
+> políticas por fila (RLS): un usuario de agencia no puede llegar a los datos
+> de otra agencia ni forzando la dirección web.
 
 ### Consejo para que la herramienta sirva
 
@@ -304,6 +343,14 @@ equipo.
 
 **"No encuentro a un compañero para invitarlo al proyecto."**
 Tiene que tener cuenta creada y aprobada. Búscalo por su correo completo.
+
+**"Un contacto de agencia está viendo el trabajo de otras agencias."**
+Se activó como **Interno**. Ve a Admin → Usuarios → Activos y cámbialo a su
+agencia con el desplegable de su fila.
+
+**"Al activar a alguien no me aparece su agencia en la lista."**
+Esa agencia todavía no existe. Créala primero en Producción de Agencias y
+vuelve a intentarlo.
 
 **"Cambié algo y no lo veo."**
 La aplicación guarda en memoria lo que ya cargaste para ir más rápido. Recarga

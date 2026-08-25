@@ -221,17 +221,61 @@ const SECCIONES: Seccion[] = [
     soloAdmin: true,
     cuerpo: (
       <div className="space-y-3">
+        <P>
+          <strong>Tú no creas cuentas.</strong> Cada persona se crea la suya y tú decides si
+          entra y qué tipo de usuario es. Da igual que sea de tu equipo o de una agencia: el
+          registro es el mismo para todos.
+        </P>
         <Pasos
           items={[
-            <>La persona se registra sola en la web con su correo.</>,
-            <>Queda en espera. Tú la ves en <strong>Admin → Usuarios</strong>.</>,
-            <>Pulsa <strong>Activar</strong>.</>,
-            <>Elige si es <strong>Interno</strong> o asígnale una <strong>Agencia</strong>.</>,
+            <>Le pasas la dirección de OrganizAPP. La persona pulsa <strong>Crear cuenta</strong> y pone su nombre, correo y contraseña.</>,
+            <>Queda en espera, sin poder ver nada. Tú la encuentras en <strong>Admin → Usuarios → Inactivos</strong>.</>,
+            <>Pulsas <strong>Activar</strong>. Se abre una ventana que te pide elegir el tipo antes de dejarla entrar.</>,
+            <><strong>Interno</strong> si es de tu equipo. <strong>De agencia</strong> si es un contacto externo — entonces eliges también cuál.</>,
           ]}
         />
         <Aviso>
-          El paso 4 es el importante: si no lo haces, la persona queda como interna por defecto y
-          verá todo el trabajo interno. Para un contacto externo, asígnale siempre su agencia.
+          Si vas a dar de alta a alguien de una agencia, <strong>crea antes la agencia</strong> en
+          Producción de Agencias. Si no existe, no la podrás elegir en la ventana.
+        </Aviso>
+        <P>
+          Nadie recibe correo en ningún momento: ni a ti te avisa cuando alguien se registra, ni a
+          la persona cuando la apruebas. Entra a mirar de vez en cuando y avísale tú.
+        </P>
+        <P>
+          ¿Te has equivocado? En la pestaña <strong>Activos</strong>, el desplegable de cada fila
+          cambia el tipo cuando quieras: de Interno a una agencia, o al revés.
+        </P>
+      </div>
+    ),
+  },
+  {
+    id: "tipos-usuario",
+    titulo: "Interno y de agencia: en qué se diferencian",
+    soloAdmin: true,
+    cuerpo: (
+      <div className="space-y-3">
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full min-w-[420px] text-sm">
+            <thead className="border-b bg-muted/30 text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="p-2.5 font-medium">Ve…</th>
+                <th className="p-2.5 font-medium">Interno</th>
+                <th className="p-2.5 font-medium">De agencia</th>
+              </tr>
+            </thead>
+            <tbody className="[&_td]:p-2.5 [&_tr]:border-b [&_tr:last-child]:border-0">
+              <tr><td>Las agencias</td><td>Todas</td><td>Solo la suya</td></tr>
+              <tr><td>Planes y entregables</td><td>Todos</td><td>Solo los de su agencia</td></tr>
+              <tr><td>Crear agencias, planes y etapas</td><td>Sí</td><td>No</td></tr>
+              <tr><td>Proyectos</td><td>Los suyos</td><td>Solo si le invitas</td></tr>
+              <tr><td>Módulo Equipo</td><td>Sí</td><td>No</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <Aviso>
+          Esta separación no es solo visual: está aplicada en la base de datos. Un usuario de
+          agencia no puede llegar a los datos de otra agencia ni forzando la dirección web.
         </Aviso>
       </div>
     ),
@@ -248,6 +292,8 @@ const SECCIONES: Seccion[] = [
           ["Todo está amontonado en «Sin etapa».", "Esos entregables no tienen etapa. Arrástralos, o cámbialos desde la vista Tabla, que es más rápida."],
           ["En el Calendario «Mío» me muestra todo.", "Eres el responsable de casi todo. Reparte los responsables entre el equipo."],
           ["No encuentro a un compañero para invitarlo.", "Tiene que tener cuenta creada y aprobada. Búscalo por su correo completo."],
+          ["Un contacto de agencia está viendo otras agencias.", "Está activado como Interno. Cámbialo en Admin → Usuarios → Activos, con el desplegable de su fila."],
+          ["Al activar a alguien no me sale su agencia.", "Esa agencia todavía no existe. Créala primero en Producción de Agencias."],
           ["Cambié algo y no lo veo.", "La app guarda en memoria lo ya cargado para ir rápido. Recarga la página."],
         ].map(([q, a]) => (
           <div key={q} className="rounded-lg border p-3">

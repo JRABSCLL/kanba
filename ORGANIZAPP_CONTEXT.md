@@ -1,7 +1,76 @@
 # OrganizAPP — Contexto del Proyecto
 
-**Última actualización:** 2026-08-21  
-**Versión actual:** v0.19.0 — RLS del módulo de agencias (migración pendiente de aplicar)
+**Última actualización:** 2026-08-25  
+**Versión actual:** v0.20.0 — alta de usuarios explícita + páginas legales propias
+
+---
+
+## Cambios v0.20.0 (alta de usuarios y textos legales)
+
+### El agujero: `user_type` por defecto es `internal`
+
+El alta de usuarios eran **dos decisiones que la interfaz trataba como una**:
+
+1. `handle_new_user()` (`20250621152739_winter_tower.sql:255`) inserta en
+   `profiles` solo `id`, `email`, `full_name`. El resto lo ponen los defaults
+   de columna: `role='member'`, `is_active=false`, **`user_type='internal'`**,
+   `agency_id=NULL`.
+2. El botón **Activar** hacía únicamente `{ is_active: true }`. No tocaba
+   `user_type`.
+3. El tipo se asignaba en un **segundo gesto separado** (el desplegable de la
+   pestaña *Activos*), fácil de olvidar.
+
+Consecuencia: activar a un contacto externo sin tocar el desplegable lo dejaba
+como **usuario interno**, con acceso a todas las agencias, todos los planes y
+el módulo Equipo. No era un fallo del RLS —el RLS aplicaba correctamente lo que
+la fila decía—, era un fallo de proceso inducido por el default.
+
+### La corrección
+
+`app/dashboard/admin/users/page.tsx` — **Activar** ya no escribe nada por sí
+solo: abre un diálogo (`ActivateDialog`) que obliga a elegir *Interno* o
+*De agencia* (con su agencia) y confirma con **un único UPDATE** de las tres
+columnas:
+
+```ts
+{ is_active: true, user_type: 'agency',   agency_id: <id> }
+{ is_active: true, user_type: 'internal', agency_id: null }
+```
+
+Nadie queda activo con un tipo que no ha elegido una persona. Si no hay
+ninguna agencia creada, la opción *De agencia* aparece deshabilitada
+explicando que hay que crearla antes. El desplegable de la pestaña *Activos*
+sigue existiendo para corregir el tipo después.
+
+Sin cambios de esquema ni de RLS: es corrección de interfaz sobre el modelo de
+permisos ya verificado en v0.19.0.
+
+### Páginas legales
+
+`app/terms/page.tsx` y `app/privacy/page.tsx` conservaban el texto legal
+heredado del proyecto original: en inglés, con la marca "Kanba" y el correo
+`ua@kanba.co`. Reescritas en español para OrganizAPP / SAIA LABS y ajustadas a
+lo que la herramienta realmente hace: uso interno, cuentas aprobadas una a una,
+sin suscripciones ni facturación (secciones que no aplicaban), datos en
+Supabase y Vercel, aislamiento por RLS. El contacto apunta al administrador de
+OrganizAPP en SAIA LABS — **no se inventó ningún correo**; si quieres uno
+concreto, hay que ponerlo a mano en ambos archivos.
+
+Auditado el resto del código: **ninguna página enlaza a GitHub ni al
+repositorio original**. Las otras coincidencias de "kanban" son el componente
+`KanbanBoard` y la metodología Kanban en español, ambas legítimas.
+
+### Documentación
+
+- `MANUAL.md` — sección "Para el administrador" reescrita: el alta explicada
+  como dos decisiones (entra / de qué lado está), tabla Interno vs De agencia,
+  aclaración de que el rol admin es independiente del tipo, y de que no hay
+  correos automáticos en ningún punto del flujo.
+- `app/dashboard/help/page.tsx` — misma explicación dentro de la app, más una
+  sección nueva "Interno y de agencia: en qué se diferencian" (solo admins).
+- Dos entradas nuevas en *Problemas frecuentes*, en el manual y en la app: el
+  contacto de agencia que ve otras agencias, y la agencia que no aparece al
+  activar.
 
 ---
 

@@ -6,77 +6,107 @@ export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <Card>
           <CardHeader>
-            <CardTitle className="text-3xl">Privacy Policy</CardTitle>
-            <p className="text-muted-foreground">Last updated: December 2024</p>
+            <CardTitle className="text-3xl">Privacidad</CardTitle>
+            <p className="text-muted-foreground">
+              OrganizAPP, herramienta interna de SAIA LABS · Última actualización: agosto de 2026
+            </p>
           </CardHeader>
-          <CardContent className="prose prose-gray dark:prose-invert max-w-none">
-            <div className="space-y-6">
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">1. Information We Collect</h2>
-                <p className="text-muted-foreground">
-                  We collect information you provide directly to us, such as when you create an account, 
-                  use our services, or contact us for support.
-                </p>
-                <ul className="list-disc list-inside space-y-2 text-muted-foreground">
-                  <li>Account information (email, name, password)</li>
-                  <li>Project and task data you create</li>
-                  <li>Usage data and analytics</li>
-                  <li>Communication data when you contact us</li>
+          <CardContent>
+            <div className="space-y-8">
+              <Seccion titulo="1. Qué datos hay aquí">
+                <p>De ti, como persona, se guarda lo mínimo para que la herramienta funcione:</p>
+                <ul className="list-disc pl-5 space-y-1.5">
+                  <li>Tu nombre y tu correo, que escribes al crear la cuenta.</li>
+                  <li>
+                    Tu contraseña, que <strong>no se guarda</strong>: se almacena un hash
+                    irreversible gestionado por Supabase Auth. Nadie de SAIA LABS puede leerla.
+                  </li>
+                  <li>
+                    Tu tipo de usuario (interno o de agencia) y, si procede, a qué agencia
+                    perteneces.
+                  </li>
                 </ul>
-              </section>
-
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">2. How We Use Your Information</h2>
-                <p className="text-muted-foreground">
-                  We use the information we collect to provide, maintain, and improve our services.
+                <p>
+                  Aparte están los datos de trabajo: proyectos, tareas, planes, entregables,
+                  comentarios y fechas. Ahí queda registrado quién crea y quién es responsable de
+                  cada cosa, porque de eso trata la herramienta.
                 </p>
-                <ul className="list-disc list-inside space-y-2 text-muted-foreground">
-                  <li>Provide and operate our services</li>
-                  <li>Process your transactions</li>
-                  <li>Send you technical notices and support messages</li>
-                  <li>Improve our services and develop new features</li>
+              </Seccion>
+
+              <Seccion titulo="2. Para qué se usan">
+                <p>
+                  Para organizar el trabajo y para saber quién tiene qué asignado. Nada más. No
+                  hay publicidad, no hay perfilado, no hay venta de datos a terceros, y no se
+                  usan para evaluar a nadie fuera del uso normal de coordinar el trabajo.
+                </p>
+              </Seccion>
+
+              <Seccion titulo="3. Quién puede ver qué">
+                <ul className="list-disc pl-5 space-y-1.5">
+                  <li>
+                    <strong>Usuarios internos y administradores</strong> ven el trabajo del
+                    equipo y el de todas las agencias.
+                  </li>
+                  <li>
+                    <strong>Usuarios de agencia</strong> ven únicamente los datos de su propia
+                    agencia. El aislamiento no depende de la interfaz: está aplicado en la base
+                    de datos mediante políticas de acceso por fila (RLS).
+                  </li>
+                  <li>
+                    En <strong>Proyectos</strong>, cada persona ve los proyectos de los que es
+                    miembro. Los administradores los ven todos.
+                  </li>
                 </ul>
-              </section>
+              </Seccion>
 
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">3. Information Sharing</h2>
-                <p className="text-muted-foreground">
-                  We do not sell, trade, or otherwise transfer your personal information to third parties 
-                  except as described in this policy.
+              <Seccion titulo="4. Dónde están">
+                <p>
+                  Los datos se alojan en Supabase (PostgreSQL) y la aplicación se sirve desde
+                  Vercel. Todo el tráfico va cifrado. No se comparten con ningún otro proveedor
+                  ni servicio de analítica.
                 </p>
-              </section>
+              </Seccion>
 
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">4. Data Security</h2>
-                <p className="text-muted-foreground">
-                  We implement appropriate security measures to protect your personal information against 
-                  unauthorized access, alteration, disclosure, or destruction.
+              <Seccion titulo="5. Cuánto tiempo se conservan">
+                <p>
+                  Mientras la cuenta esté activa y mientras el trabajo registrado siga siendo
+                  útil para SAIA LABS. Cuando alguien deja de colaborar, su cuenta se desactiva:
+                  deja de tener acceso, pero el histórico del trabajo (quién hizo qué) se
+                  mantiene, porque forma parte del registro de los proyectos.
                 </p>
-              </section>
+              </Seccion>
 
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">5. Your Rights</h2>
-                <p className="text-muted-foreground">
-                  You have the right to access, update, or delete your personal information. 
-                  You can do this through your account settings or by contacting us.
+              <Seccion titulo="6. Tus derechos">
+                <p>
+                  Puedes cambiar tu nombre desde <strong>Ajustes</strong> y tu contraseña desde la
+                  pantalla de entrada. Para consultar, corregir o pedir la eliminación de tus
+                  datos personales, escribe al administrador de OrganizAPP en SAIA LABS.
                 </p>
-              </section>
+              </Seccion>
 
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">6. Contact Us</h2>
-                <p className="text-muted-foreground">
-                  If you have any questions about this Privacy Policy, please contact us at 
-                  ua@kanba.co.
+              <Seccion titulo="7. Dudas">
+                <p>
+                  Cualquier pregunta sobre cómo se tratan tus datos aquí, háblalo con el
+                  administrador de OrganizAPP en SAIA LABS.
                 </p>
-              </section>
+              </Seccion>
             </div>
           </CardContent>
         </Card>
       </div>
     </div>
+  );
+}
+
+function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <h2 className="text-lg font-semibold">{titulo}</h2>
+      <div className="space-y-2 text-sm leading-relaxed text-muted-foreground">{children}</div>
+    </section>
   );
 }

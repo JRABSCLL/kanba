@@ -9,6 +9,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { Loader2, Check, X, Shield, ShieldOff, UserCheck, UserX, Clock } from "lucide-react"
 
@@ -36,6 +44,11 @@ export default function AdminUsersPage() {
   const [agencies, setAgencies] = useState<Agency[]>([])
   const [fetching, setFetching] = useState(true)
   const [acting, setActing] = useState<string | null>(null)
+  // Activar es una decisión doble: abrir la puerta y decir de qué lado está la
+  // persona. El tipo por defecto es 'internal', así que activar sin elegir deja
+  // a un contacto externo viendo todo el trabajo interno. Este diálogo obliga a
+  // decidirlo en el mismo gesto.
+  const [toActivate, setToActivate] = useState<AdminProfile | null>(null)
 
   const isAdmin = user?.role === "admin" && user?.is_active === true
 
@@ -87,15 +100,32 @@ export default function AdminUsersPage() {
 
     if (error) {
       toast.error("No se pudo actualizar el usuario")
-    } else {
-      toast.success(successMessage)
-      await fetchData()
+      setActing(null)
+      return false
     }
+
+    toast.success(successMessage)
+    await fetchData()
     setActing(null)
+    return true
   }
 
-  const activate = (p: AdminProfile) =>
-    updateProfile(p.id, { is_active: true }, `${p.email} ha sido activado`)
+  // Un solo UPDATE con las tres columnas: la persona nunca queda activa con un
+  // tipo que nadie ha elegido.
+  const activate = async (p: AdminProfile, agencyId: string | null) => {
+    const agencyName = agencies.find((a) => a.id === agencyId)?.name
+    const ok = await updateProfile(
+      p.id,
+      agencyId
+        ? { is_active: true, user_type: "agency", agency_id: agencyId }
+        : { is_active: true, user_type: "internal", agency_id: null },
+      agencyId
+        ? `${p.email} activado como contacto de ${agencyName}`
+        : `${p.email} activado como usuario interno`,
+    )
+    if (ok) setToActivate(null)
+  }
+
   const deactivate = (p: AdminProfile) =>
     updateProfile(p.id, { is_active: false }, `${p.email} ha sido desactivado`)
   const promote = (p: AdminProfile) =>
@@ -205,7 +235,7 @@ export default function AdminUsersPage() {
               ) : (
                 inactive.map((p) => (
                   <UserRow key={p.id} p={p} acting={acting === p.id} agencies={agencies} agencyName={agencies.find(a => a.id === p.agency_id)?.name}>
-                    <Button size="sm" onClick={() => activate(p)} disabled={acting === p.id}>
+                    <Button size="sm" onClick={() => setToActivate(p)} disabled={acting === p.id}>
                       <Check className="w-4 h-4 mr-1" />
                       Activar
                     </Button>
@@ -259,6 +289,151 @@ export default function AdminUsersPage() {
           </Tabs>
         </CardContent>
       </Card>
+
+      <ActivateDialog
+        profile={toActivate}
+        agencies={agencies}
+        busy={acting !== null && acting === toActivate?.id}
+        onCancel={() => setToActivate(null)}
+        onConfirm={activate}
+      />
+    </div>
+  )
+}
+
+function ActivateDialog({
+  profile,
+  agencies,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  profile: AdminProfile | null
+  agencies: Agency[]
+  busy: boolean
+  onCancel: () => void
+  onConfirm: (p: AdminProfile, agencyId: string | null) => void
+}) {
+  const [kind, setKind] = useState<"internal" | "agency">("internal")
+  const [agencyId, setAgencyId] = useState("")
+
+  // Cada usuario empieza la decisión desde cero.
+  useEffect(() => {
+    if (profile) {
+      setKind("internal")
+      setAgencyId("")
+    }
+  }, [profile])
+
+  if (!profile) return null
+
+  const noAgencies = agencies.length === 0
+  const incomplete = kind === "agency" && !agencyId
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open && !busy) onCancel() }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Activar a {profile.full_name || profile.email.split("@")[0]}</DialogTitle>
+          <DialogDescription>
+            {profile.email} — elige qué tipo de usuario es antes de darle acceso.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2">
+          <Option
+            selected={kind === "internal"}
+            onSelect={() => setKind("internal")}
+            title="Interno"
+            detail="De tu equipo. Ve todas las agencias, todos los planes y el módulo Equipo."
+          />
+          <Option
+            selected={kind === "agency"}
+            onSelect={() => !noAgencies && setKind("agency")}
+            disabled={noAgencies}
+            title="De agencia"
+            detail={
+              noAgencies
+                ? "No hay ninguna agencia creada todavía. Créala en Producción de Agencias y vuelve aquí."
+                : "Contacto externo. Solo ve los datos de su agencia."
+            }
+          >
+            {kind === "agency" && (
+              <select
+                className="mt-3 h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                value={agencyId}
+                onChange={(e) => setAgencyId(e.target.value)}
+                autoFocus
+              >
+                <option value="">Elige la agencia…</option>
+                {agencies.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            )}
+          </Option>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={busy}>
+            Cancelar
+          </Button>
+          <Button onClick={() => onConfirm(profile, kind === "agency" ? agencyId : null)} disabled={busy || incomplete}>
+            {busy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Check className="w-4 h-4 mr-1" />}
+            Activar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function Option({
+  selected,
+  disabled,
+  onSelect,
+  title,
+  detail,
+  children,
+}: {
+  selected: boolean
+  disabled?: boolean
+  onSelect: () => void
+  title: string
+  detail: string
+  children?: React.ReactNode
+}) {
+  return (
+    <div
+      role="radio"
+      aria-checked={selected}
+      aria-disabled={disabled}
+      tabIndex={disabled ? -1 : 0}
+      onClick={() => !disabled && onSelect()}
+      onKeyDown={(e) => {
+        if (!disabled && (e.key === " " || e.key === "Enter")) {
+          e.preventDefault()
+          onSelect()
+        }
+      }}
+      className={`rounded-lg border p-3 text-left transition-colors ${
+        disabled
+          ? "opacity-50 cursor-not-allowed"
+          : `cursor-pointer ${selected ? "border-foreground bg-muted/40" : "hover:bg-muted/30"}`
+      }`}
+    >
+      <div className="flex items-start gap-2.5">
+        <span
+          className={`mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 ${
+            selected ? "border-foreground bg-foreground" : "border-muted-foreground/40"
+          }`}
+        />
+        <div className="min-w-0">
+          <div className="text-sm font-medium">{title}</div>
+          <p className="text-xs text-muted-foreground mt-0.5">{detail}</p>
+        </div>
+      </div>
+      {children}
     </div>
   )
 }

@@ -6,80 +6,108 @@ export default function TermsPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <Card>
           <CardHeader>
-            <CardTitle className="text-3xl">Terms of Service</CardTitle>
-            <p className="text-muted-foreground">Last updated: December 2024</p>
+            <CardTitle className="text-3xl">Condiciones de uso</CardTitle>
+            <p className="text-muted-foreground">
+              OrganizAPP, herramienta interna de SAIA LABS · Última actualización: agosto de 2026
+            </p>
           </CardHeader>
-          <CardContent className="prose prose-gray dark:prose-invert max-w-none">
-            <div className="space-y-6">
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">1. Acceptance of Terms</h2>
-                <p className="text-muted-foreground">
-                  By accessing and using Kanba, you accept and agree to be bound by the terms 
-                  and provision of this agreement.
+          <CardContent>
+            <div className="space-y-8">
+              <Seccion titulo="1. Qué es esto">
+                <p>
+                  OrganizAPP es una herramienta interna de SAIA LABS para organizar el trabajo del
+                  equipo y hacer seguimiento de la producción de las agencias con las que
+                  colabora. No es un servicio público ni está abierto al registro libre: las
+                  cuentas las aprueba un administrador de SAIA LABS una por una.
                 </p>
-              </section>
+              </Seccion>
 
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">2. Use License</h2>
-                <p className="text-muted-foreground">
-                  Permission is granted to temporarily access Kanba for personal, 
-                  non-commercial transitory viewing only.
+              <Seccion titulo="2. Quién puede usarla">
+                <p>
+                  Solo el personal de SAIA LABS y los contactos de las agencias colaboradoras a
+                  quienes se les haya dado acceso expresamente. El acceso está ligado a la
+                  relación profesional que lo motiva y puede retirarse en cualquier momento
+                  cuando esa relación termina o cambia.
                 </p>
-                <ul className="list-disc list-inside space-y-2 text-muted-foreground">
-                  <li>This is the grant of a license, not a transfer of title</li>
-                  <li>You may not modify or copy the materials</li>
-                  <li>You may not use the materials for commercial purposes</li>
-                  <li>You may not attempt to reverse engineer any software</li>
+              </Seccion>
+
+              <Seccion titulo="3. Tu cuenta">
+                <ul className="list-disc pl-5 space-y-1.5">
+                  <li>Tu cuenta es personal e intransferible. No la compartas.</li>
+                  <li>
+                    Eres responsable de tu contraseña y de lo que se haga desde tu sesión.
+                  </li>
+                  <li>
+                    Si crees que alguien ha accedido a tu cuenta, avisa a un administrador para
+                    que la desactive.
+                  </li>
                 </ul>
-              </section>
+              </Seccion>
 
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">3. Account Responsibilities</h2>
-                <p className="text-muted-foreground">
-                  You are responsible for maintaining the confidentiality of your account 
-                  and password and for restricting access to your account.
+              <Seccion titulo="4. Qué se espera de ti">
+                <p>
+                  Que uses la herramienta para el trabajo para el que se te ha dado acceso. En
+                  concreto, no está permitido:
                 </p>
-              </section>
+                <ul className="list-disc pl-5 space-y-1.5">
+                  <li>
+                    Sacar de aquí información de clientes, agencias o proyectos para usarla fuera
+                    del encargo que la justifica.
+                  </li>
+                  <li>Intentar acceder a datos de otras agencias o de proyectos ajenos.</li>
+                  <li>Dar acceso a terceros por tu cuenta.</li>
+                </ul>
+              </Seccion>
 
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">4. Subscription and Billing</h2>
-                <p className="text-muted-foreground">
-                  Subscription fees are billed in advance on a monthly basis and are non-refundable. 
-                  You can cancel your subscription at any time.
+              <Seccion titulo="5. Los contenidos">
+                <p>
+                  Los proyectos, tareas, planes y entregables que se registran aquí son
+                  información de trabajo de SAIA LABS y de sus clientes. Lo que subas o escribas
+                  queda dentro de ese ámbito. La propiedad intelectual de las piezas producidas
+                  se rige por el contrato que corresponda en cada caso, no por esta herramienta.
                 </p>
-              </section>
+              </Seccion>
 
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">5. Prohibited Uses</h2>
-                <p className="text-muted-foreground">
-                  You may not use Kanba for any unlawful purpose or to solicit others 
-                  to perform unlawful acts.
+              <Seccion titulo="6. Disponibilidad">
+                <p>
+                  OrganizAPP es una herramienta interna, no un servicio con garantía de
+                  disponibilidad. Puede estar en mantenimiento o dejar de estar disponible sin
+                  aviso previo. No la uses como único sitio donde guardas algo que no puedes
+                  perder.
                 </p>
-              </section>
+              </Seccion>
 
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">6. Limitation of Liability</h2>
-                <p className="text-muted-foreground">
-                  In no event shall Kanba or its suppliers be liable for any damages 
-                  arising out of the use or inability to use the service.
+              <Seccion titulo="7. Cambios">
+                <p>
+                  SAIA LABS puede modificar estas condiciones y la propia herramienta. Los
+                  cambios relevantes se comunican al equipo por los canales internos habituales.
                 </p>
-              </section>
+              </Seccion>
 
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">7. Contact Information</h2>
-                <p className="text-muted-foreground">
-                  If you have any questions about these Terms of Service, please contact us at 
-                  ua@kanba.co.
+              <Seccion titulo="8. Dudas">
+                <p>
+                  Si tienes cualquier pregunta sobre estas condiciones, sobre tu acceso o sobre
+                  qué puedes hacer con la información que ves aquí, habla con el administrador de
+                  OrganizAPP en SAIA LABS.
                 </p>
-              </section>
+              </Seccion>
             </div>
           </CardContent>
         </Card>
       </div>
     </div>
+  );
+}
+
+function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <h2 className="text-lg font-semibold">{titulo}</h2>
+      <div className="space-y-2 text-sm leading-relaxed text-muted-foreground">{children}</div>
+    </section>
   );
 }
