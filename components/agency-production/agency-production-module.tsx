@@ -6,6 +6,7 @@ import dynamic from "next/dynamic"
 import { useQueryClient } from "@tanstack/react-query"
 import { DragDropContext, Droppable, Draggable, DropResult, DraggableProvided, DroppableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd"
 import { supabase } from "@/lib/supabase"
+import { todayIso, monthEndIso, toIsoDate, parseIsoDate, addDays, isPastDue, daysBetween } from "@/lib/dates"
 import { useUser } from "@/components/user-provider"
 import { ViewToggle } from "@/components/ui/view-toggle"
 import { DeliverableComments } from "@/components/deliverable-comments"
@@ -190,11 +191,7 @@ function statusMeta(status: string) {
 
 const DEFAULT_TYPES = ["Video", "Arte", "Copy", "Parrilla", "Story", "Reel", "Reporte", "Banner", "Guion", "Idea"]
 
-const todayIso = () => new Date().toISOString().slice(0, 10)
-const monthEndIso = () => {
-  const now = new Date()
-  return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10)
-}
+// Fechas: ver lib/dates.ts. Nada aquí debe pasar por UTC.
 
 const newPlanItemDraft = (): PlanItemDraft => ({
   local_id: crypto.randomUUID(),
@@ -228,19 +225,8 @@ const statusTone = (status: string) => {
 }
 
 function isOverdue(deliverable: Deliverable) {
-  if (!deliverable.due_date) return false
   if (["approved", "published", "cancelled"].includes(deliverable.status)) return false
-  return deliverable.due_date < todayIso()
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date)
-  next.setDate(next.getDate() + days)
-  return next
-}
-
-function toIsoDate(date: Date) {
-  return date.toISOString().slice(0, 10)
+  return isPastDue(deliverable.due_date)
 }
 
 function distributedDueDate(index: number, total: number, start: string, end: string, strategy: string) {
@@ -248,10 +234,10 @@ function distributedDueDate(index: number, total: number, start: string, end: st
   if (strategy === "same_end") return end || null
   if (!start || !end) return null
 
-  const startDate = new Date(`${start}T00:00:00`)
-  const endDate = new Date(`${end}T00:00:00`)
-  const diffDays = Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 86400000))
-  if (total <= 1 || diffDays === 0) return toIsoDate(endDate)
+  const startDate = parseIsoDate(start)
+  if (!startDate) return null
+  const diffDays = daysBetween(start, end)
+  if (diffDays === null || diffDays <= 0 || total <= 1) return end
 
   const offset = Math.round((index / Math.max(1, total - 1)) * diffDays)
   return toIsoDate(addDays(startDate, offset))
@@ -339,6 +325,8 @@ export function AgencyProductionModule() {
   
   // Quick launch
   const [quickLaunchOpen, setQuickLaunchOpen] = useState(false)
+  const [planToDelete, setPlanToDelete] = useState<ProductionPlan | null>(null)
+  const [deletingPlan, setDeletingPlan] = useState(false)
 
   const [agencyForm, setAgencyForm] = useState({ name: "", type: "", contact_name: "", contact_email: "", notes: "" })
   const [brandForm, setBrandForm] = useState({ name: "", description: "" })
@@ -597,7 +585,14 @@ export function AgencyProductionModule() {
     const totalDeliverables = normalizedItems.reduce((sum, item) => sum + item.quantity, 0)
     if (totalDeliverables > 500) return toast.error("Máximo 500 entregables por plan")
 
+    if (planForm.period_end < planForm.period_start) {
+      return toast.error("La fecha de fin no puede ser anterior a la de inicio")
+    }
+
     setCreatingPlan(true)
+    // Si algo falla a mitad, hay que deshacer lo ya creado: sin esto quedaba un
+    // plan a medias que además no había forma de borrar.
+    let createdPlanId: string | null = null
     try {
       const { data: plan, error: planError } = await supabase
         .from("production_plans")
@@ -616,6 +611,7 @@ export function AgencyProductionModule() {
         .select()
         .single()
       if (planError) throw planError
+      createdPlanId = plan.id
 
       // Create default stages from first template (Producción estándar)
       const defaultTemplate = stageTemplates.find(t => t.is_system) || stageTemplates[0]
@@ -688,6 +684,13 @@ export function AgencyProductionModule() {
       setActiveView("dashboard")
       await loadData()
     } catch (error: any) {
+      // Deshacer: el mensaje "no se pudo crear el plan" tiene que ser verdad.
+      if (createdPlanId) {
+        await supabase.from("production_deliverables").delete().eq("plan_id", createdPlanId)
+        await supabase.from("production_plan_items").delete().eq("plan_id", createdPlanId)
+        await supabase.from("production_plan_stages").delete().eq("plan_id", createdPlanId)
+        await supabase.from("production_plans").delete().eq("id", createdPlanId)
+      }
       toast.error(error.message || "No se pudo crear el plan")
     } finally {
       setCreatingPlan(false)
@@ -919,6 +922,43 @@ export function AgencyProductionModule() {
       toast.error(error.message || "No se pudo crear el plan")
     } finally {
       setCreatingPlan(false)
+    }
+  }
+
+  /**
+   * Borrar un plan y todo lo que cuelga de él.
+   *
+   * Las tablas de producción se crearon fuera de las migraciones, así que no
+   * damos por hecho que haya ON DELETE CASCADE: borramos los hijos en orden
+   * (entregables → ítems → etapas → plan). Si hay cascada, estos borrados
+   * simplemente no encuentran nada y no molestan.
+   */
+  async function deletePlan(plan: ProductionPlan) {
+    if (!canManageProduction) return toast.error("No tienes permiso para borrar planes")
+    setDeletingPlan(true)
+    try {
+      const children = [
+        supabase.from("production_deliverables").delete().eq("plan_id", plan.id),
+        supabase.from("production_plan_items").delete().eq("plan_id", plan.id),
+        supabase.from("production_plan_stages").delete().eq("plan_id", plan.id),
+      ]
+      for (const step of children) {
+        const { error } = await step
+        if (error) throw error
+      }
+
+      const { error } = await supabase.from("production_plans").delete().eq("id", plan.id)
+      if (error) throw error
+
+      setPlanToDelete(null)
+      setSelectedPlanId(null)
+      setActiveView(plan.agency_id ? "agency" : "dashboard")
+      toast.success("Plan eliminado")
+      await loadData()
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo eliminar el plan")
+    } finally {
+      setDeletingPlan(false)
     }
   }
 
@@ -1216,13 +1256,75 @@ export function AgencyProductionModule() {
             ]}
           />
           {canManageProduction && (
-            <Button variant="outline" size="sm" onClick={() => setStagesManagerOpen(true)}>
-              <Settings2 className="h-4 w-4 mr-2" />
-              Configurar etapas
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => setStagesManagerOpen(true)}>
+                <Settings2 className="h-4 w-4 mr-2" />
+                Configurar etapas
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-red-600 hover:text-red-600"
+                onClick={() => selectedPlan && setPlanToDelete(selectedPlan)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Eliminar plan
+              </Button>
+            </div>
           )}
         </div>
       )}
+
+      {/* Borrar un plan se lleva por delante todo su contenido: hay que decir
+          cuánto antes de preguntar. */}
+      <Dialog open={!!planToDelete} onOpenChange={(open) => { if (!open && !deletingPlan) setPlanToDelete(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Eliminar «{planToDelete?.name}»</DialogTitle>
+            <DialogDescription>Esto no se puede deshacer.</DialogDescription>
+          </DialogHeader>
+
+          {planToDelete && (() => {
+            const count = deliverables.filter((d: Deliverable) => d.plan_id === planToDelete.id).length
+            const stageCount = planStages.filter((s: PlanStage) => s.plan_id === planToDelete.id).length
+            return (
+              <div className="rounded-lg border p-3 text-sm">
+                <p className="text-muted-foreground">Se borrarán también:</p>
+                <ul className="mt-2 space-y-1">
+                  <li className="flex justify-between">
+                    <span>Entregables</span>
+                    <span className="font-medium tabular-nums">{count}</span>
+                  </li>
+                  <li className="flex justify-between">
+                    <span>Etapas</span>
+                    <span className="font-medium tabular-nums">{stageCount}</span>
+                  </li>
+                </ul>
+                {count > 0 && (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Si solo quieres cerrarlo sin perder el histórico, cambia su estado a
+                    archivado en vez de borrarlo.
+                  </p>
+                )}
+              </div>
+            )
+          })()}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setPlanToDelete(null)} disabled={deletingPlan}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => planToDelete && deletePlan(planToDelete)}
+              disabled={deletingPlan}
+            >
+              {deletingPlan ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Eliminar plan
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Primer uso: si no hay nada, decir exactamente qué hacer y en qué orden. */}
       {activeView === "dashboard" && agencies.length === 0 && canManageProduction && (

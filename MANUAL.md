@@ -6,23 +6,6 @@ que nadie se lo explique.
 > Este mismo contenido está **dentro de la aplicación**, en el menú lateral →
 > **Guía de uso**. Dile a tu equipo que lo busque ahí; no necesitan entrar aquí.
 
-## Quién puede hacer qué
-
-| | Admin | Interno | Agencia |
-|---|---|---|---|
-| Crear agencias, marcas y planes | Sí | Sí | No |
-| Configurar etapas | Sí | Sí | No |
-| Crear entregables | Sí | Sí | Sí (dentro de un plan) |
-| Editar y mover entregables | Todos | Todos | Solo los de su agencia |
-| Eliminar entregables | Sí | Sí | No |
-| Ver otras agencias | Sí | Sí | No |
-| Gestionar usuarios | Sí | No | No |
-
-Un usuario de **agencia** solo ve su propia agencia. En Proyectos, solo ve
-aquellos a los que se le haya invitado expresamente.
-
----
-
 ## Qué es
 
 OrganizAPP tiene **dos módulos** y sirven para cosas distintas:
@@ -70,6 +53,37 @@ misma pantalla. Si no ves el correo, mira en la carpeta de spam.
 
 Arriba a la derecha hay un icono para cambiar el aspecto: **claro**, **oscuro**
 o **sepia**.
+
+---
+
+## Tu día a día
+
+Esto es el 99% del uso. Lo demás son detalles.
+
+### ¿Qué tengo que hacer hoy?
+
+Dos sitios lo contestan:
+
+- **Inicio** — lo que tienes asignado ahora mismo. Es lo primero que ves al
+  entrar.
+- **Calendario** — lo mismo, repartido por días, para ver qué se te viene
+  encima.
+
+En los dos, lo que sale **en rojo** ya pasó de fecha. Lo que vence hoy **no**
+se pinta de rojo: todavía estás a tiempo.
+
+> Si no te aparece nada, no es que no tengas trabajo: es que nadie te lo ha
+> **asignado**, o las cosas **no tienen fecha**. Esas dos casillas son las que
+> hacen que la herramienta sirva de algo.
+
+### Marcar que algo avanzó
+
+| Si es… | Haces… |
+|---|---|
+| Una tarea de proyecto | Arrástrala a la siguiente columna. Para darla por terminada, pulsa el cuadrito de la izquierda: se tacha |
+| Un entregable de agencia | Arrástralo a la siguiente etapa. Para cambiar en qué punto está, pulsa su etiqueta de estado |
+
+Todo se guarda solo. **No hay ningún botón de guardar en ninguna parte.**
 
 ---
 
@@ -154,9 +168,44 @@ Agencia  →  Plan  →  Entregables
 
 Se crean solos el plan y sus etapas. Es el camino recomendado.
 
-> También existe **Configuración → Crear plan detallado**, con muchos más
-> campos (cantidades, canales, formatos, nombres automáticos). Úsalo solo si
-> necesitas un plan a medida.
+### El plan detallado
+
+**Configuración → Crear plan detallado** hace algo distinto al lanzamiento
+rápido: en vez de un plan vacío, le describes **cuántas piezas quieres de cada
+tipo** y te genera todas las tarjetas de golpe.
+
+Rellenas los datos del plan (agencia, fechas, responsable) y abajo los
+**ítems**. Cada ítem es un tipo de pieza y una cantidad:
+
+```
+Ítem 1: Tipo "Video",   Cantidad 30,  Nombre base "Reel campaña"
+Ítem 2: Tipo "Reporte", Cantidad 4,   Nombre base "Reporte semanal"
+```
+
+Al pulsar **Crear plan y generar entregables** aparecen 34 tarjetas:
+`Reel campaña 01` … `Reel campaña 30` y `Reporte semanal 01` … `04`, todas en
+Pendiente y en la primera etapa.
+
+Las **fechas** dependen de lo que elijas arriba:
+
+| Opción | Qué hace |
+|---|---|
+| Distribuir automáticamente | Reparte las 34 entre inicio y fin, a intervalos iguales |
+| Misma fecha final | Todas vencen el día de fin |
+| Sin fechas | Ninguna tiene fecha (y no salen en el Calendario) |
+
+Límites: 250 por ítem, 500 en total.
+
+> **Solo genera al crear.** Si el mes siguiente quieres otras 30 piezas,
+> tendrás que añadirlas una a una o crear otro plan.
+
+### Eliminar un plan
+
+Dentro del plan, botón **Eliminar plan**. Antes de confirmar te dice cuántos
+entregables y cuántas etapas se lleva por delante. **No se puede deshacer.**
+
+Si solo quieres cerrar un plan sin perder el histórico, cambia su estado a
+archivado en vez de borrarlo.
 
 ### Moverte por el módulo
 
@@ -302,6 +351,19 @@ interno.
 > Esta separación no es solo visual. Está aplicada en la base de datos con
 > políticas por fila (RLS): un usuario de agencia no puede llegar a los datos
 > de otra agencia ni forzando la dirección web.
+
+### Quién puede hacer qué
+
+| | Admin | Interno | Agencia |
+|---|---|---|---|
+| Crear agencias, marcas y planes | Sí | Sí | No |
+| Configurar etapas | Sí | Sí | No |
+| Eliminar un plan | Sí | Sí | No |
+| Crear entregables | Sí | Sí | Sí (dentro de un plan) |
+| Editar y mover entregables | Todos | Todos | Solo los de su agencia |
+| Eliminar entregables | Sí | Sí | No |
+| Ver otras agencias | Sí | Sí | No |
+| Gestionar usuarios | Sí | No | No |
 
 ### Consejo para que la herramienta sirva
 

@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
+import { isPastDue } from "@/lib/dates"
 import { useUser } from "@/components/user-provider"
 import type { WorkItem } from "@/hooks/use-my-work"
 
@@ -18,11 +19,6 @@ export type TeamMemberWorkload = {
 
 const DELIVERABLE_DONE = new Set(["approved", "published"])
 
-function startOfToday() {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d
-}
 function pick(rel: any) {
   return Array.isArray(rel) ? rel[0] ?? null : rel ?? null
 }
@@ -37,7 +33,6 @@ export function useTeamWorkload() {
     queryKey: ["team-workload", user?.id],
     enabled: !!user,
     queryFn: async (): Promise<TeamMemberWorkload[]> => {
-      const today = startOfToday()
 
       // Personas: usuarios internos/admin activos (los que ejecutan trabajo interno).
       const { data: profiles } = await supabase
@@ -69,7 +64,7 @@ export function useTeamWorkload() {
         const done = !!t.is_done
         if (done) continue
         const project = pick(pick(t.columns)?.projects)
-        const overdue = !!t.due_date && new Date(t.due_date) < today && !done
+        const overdue = isPastDue(t.due_date) && !done
         push(t.assigned_to, {
           id: t.id, kind: "task", title: t.title, due_date: t.due_date,
           done, overdue, priority: t.priority,
@@ -81,7 +76,7 @@ export function useTeamWorkload() {
       for (const d of (deliverables || []) as any[]) {
         const done = DELIVERABLE_DONE.has(d.status)
         if (done || d.status === "cancelled") continue
-        const overdue = !!d.due_date && new Date(d.due_date) < today && !done
+        const overdue = isPastDue(d.due_date) && !done
         push(d.responsible_internal_id, {
           id: d.id, kind: "deliverable", title: d.title, due_date: d.due_date,
           done, overdue, priority: d.priority, status: d.status,

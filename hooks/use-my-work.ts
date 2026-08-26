@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
+import { isPastDue } from "@/lib/dates"
 import { useUser } from "@/components/user-provider"
 
 export type WorkScope = "mine" | "all"
@@ -22,12 +23,6 @@ export type WorkItem = {
 
 const DELIVERABLE_DONE = new Set(["approved", "published"])
 
-function startOfToday() {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
 function pick<T>(rel: any): T | null {
   // Los embeds to-one de Supabase pueden venir como objeto o array; normalizamos.
   if (Array.isArray(rel)) return (rel[0] ?? null) as T | null
@@ -43,7 +38,6 @@ export function useMyWork(scope: WorkScope) {
     queryKey: ["my-work", user?.id, scope],
     enabled: !!user,
     queryFn: async (): Promise<WorkItem[]> => {
-      const today = startOfToday()
 
       // --- Tareas de proyecto ---
       let tasksQuery = supabase
@@ -56,7 +50,7 @@ export function useMyWork(scope: WorkScope) {
         const column = pick<any>(t.columns)
         const project = pick<any>(column?.projects)
         const done = !!t.is_done
-        const overdue = !!t.due_date && new Date(t.due_date) < today && !done
+        const overdue = isPastDue(t.due_date) && !done
         return {
           id: t.id,
           kind: "task",
@@ -80,7 +74,7 @@ export function useMyWork(scope: WorkScope) {
       const delivItems: WorkItem[] = (deliverables || []).map((d: any) => {
         const agency = pick<any>(d.agencies)
         const done = DELIVERABLE_DONE.has(d.status)
-        const overdue = !!d.due_date && new Date(d.due_date) < today && !done && d.status !== "cancelled"
+        const overdue = isPastDue(d.due_date) && !done && d.status !== "cancelled"
         return {
           id: d.id,
           kind: "deliverable",

@@ -1,7 +1,105 @@
 # OrganizAPP — Contexto del Proyecto
 
-**Última actualización:** 2026-08-25  
-**Versión actual:** v0.20.0 — alta de usuarios explícita + páginas legales propias
+**Última actualización:** 2026-08-26  
+**Versión actual:** v0.21.0 — fechas locales, borrado de planes, guía reordenada
+
+---
+
+## Cambios v0.21.0 (fechas, planes y guía)
+
+### 🔴 Las fechas se calculaban en UTC (el equipo trabaja en Ecuador, UTC-5)
+
+Dos fallos distintos del mismo origen, los dos verificados ejecutando el código
+con `TZ=America/Guayaquil`:
+
+**1. `todayIso()` adelantaba el día a partir de las 19:00.**
+
+```
+new Date().toISOString().slice(0,10)
+  14:00 local → 2026-08-25   ✅
+  19:30 local → 2026-08-26   ❌ ya cree que es mañana
+```
+
+Es lo que alimentaba `isOverdue()` en el módulo de agencias: **cada tarde, todo
+lo que vencía ese día pasaba a rojo como atrasado**.
+
+**2. `new Date("2026-08-25")` se interpreta como medianoche UTC**, que en
+Ecuador son las 19:00 del día anterior. Comparado contra la medianoche local de
+hoy salía "anterior", así que **todo lo que vencía hoy se marcaba vencido** —
+permanente, no solo por la tarde. Afectaba a `use-my-work.ts` y
+`use-team-workload.ts`, o sea a **Inicio, Calendario y Equipo**.
+
+Nota: el diagnóstico inicial se hizo con la zona del contenedor
+(`Europe/Madrid`, UTC+2) y apuntaba a un off-by-one en `monthEndIso()` y en las
+fechas distribuidas. En UTC-5 **eso no ocurre**; los fallos reales son los dos
+de arriba. La corrección los cubre todos porque elimina UTC de la ecuación.
+
+**Solución:** `lib/dates.ts`, único sitio donde se tratan fechas de calendario.
+La regla es que un día del calendario se compara **como texto** (`"2026-08-25" <
+"2026-08-26"`, correcto y sin zona horaria) y solo se convierte a `Date` con
+hora local explícita.
+
+| Función | Para qué |
+|---|---|
+| `toIsoDate(date)` | Fecha local → `YYYY-MM-DD`, nunca pasa por UTC |
+| `todayIso()` | Hoy en la zona de quien usa la app |
+| `monthEndIso()` | Último día del mes en curso |
+| `parseIsoDate(iso)` | `YYYY-MM-DD` → `Date` a medianoche local |
+| `addDays(date, n)` | Suma días sin tocar la hora local |
+| `isPastDue(iso)` | ¿Ya pasó? **Vencer hoy no es ir con retraso** |
+| `daysBetween(a, b)` | Días de calendario entre dos ISO |
+
+Consumido por `agency-production-module.tsx`, `use-my-work.ts` y
+`use-team-workload.ts`. El calendario ya usaba `format()` de date-fns (local),
+así que la rejilla estaba bien: lo que fallaba era el rojo.
+
+### 🔴 No existía forma de borrar un plan
+
+Se podían borrar etapas y entregables uno a uno, pero un plan no. Un plan mal
+creado —con hasta 500 entregables— era permanente.
+
+`deletePlan()` borra los hijos en orden explícito (entregables → ítems →
+etapas → plan) porque las tablas de producción se crearon fuera de las
+migraciones y no se puede dar por hecho que haya `ON DELETE CASCADE`. Si la hay,
+los borrados previos simplemente no encuentran nada.
+
+El diálogo cuenta lo que se va a perder antes de preguntar, y sugiere archivar
+en vez de borrar cuando hay entregables.
+
+### 🔴 `createPlan` dejaba planes a medias
+
+Insertaba plan → etapas → ítems → entregables sin transacción. Si fallaba el
+último paso te quedabas con un plan sin entregables **y** con el mensaje "No se
+pudo crear el plan", que era falso — el plan existía. Combinado con el punto
+anterior, esa basura era imborrable.
+
+Ahora se guarda `createdPlanId` y el `catch` deshace lo creado antes de mostrar
+el error. Añadida también la validación que faltaba: fin ≥ inicio (invertirlas
+hacía que `diffDays` fuera 0 y todos los entregables vencieran el mismo día, en
+silencio).
+
+### Guía reordenada (era una guía de administrador)
+
+Estaba ordenada por funcionalidades y abría con la tabla de permisos, que es
+justo lo que **no** necesita quien entra a trabajar. Ahora va por lo que la
+persona quiere hacer, agrupada:
+
+```
+Para empezar   → qué es esto · tu primer día
+Tu día a día   → ¿qué tengo que hacer hoy? · marcar que algo avanzó · calendario
+Proyectos      → crear · tablero o lista · trabajar con más gente
+Agencias       → cómo está organizado · etapa vs estado · editar un entregable
+Administración → crear agencia y plan · dar de alta · interno vs agencia   [Admin]
+Si algo no cuadra → quién puede hacer qué · problemas frecuentes
+```
+
+Lo de administración queda al final, en su propio bloque y con distintivo. Las
+secciones llevan además palabras clave ocultas (`busca`) para que el buscador
+encuentre "contraseña" o "arrastrar" aunque no estén en el título.
+
+`MANUAL.md` sigue la misma reordenación: fuera la tabla de permisos de la
+cabecera (movida a la sección de administrador), y sección nueva **Tu día a
+día**. Documentados además el plan detallado y el borrado de planes.
 
 ---
 
