@@ -1,7 +1,68 @@
 # OrganizAPP — Contexto del Proyecto
 
-**Última actualización:** 2026-08-26  
-**Versión actual:** v0.21.0 — fechas locales, borrado de planes, guía reordenada
+**Última actualización:** 2026-08-27  
+**Versión actual:** v0.22.0 — el admin dejaba de ser admin al rato
+
+---
+
+## Cambios v0.22.0 (sesión: pérdida silenciosa de permisos)
+
+### El síntoma
+
+Dejas la sesión abierta unos minutos y, sin hacer nada, **Admin desaparece del
+menú y sigues como usuario común** hasta recargar la página.
+
+### La causa: dos fallos encadenados en `user-provider.tsx`
+
+**1. Se llamaba a la base de datos dentro del callback de `onAuthStateChange`.**
+
+supabase-js (2.103.2) ejecuta ese callback **con el candado de auth tomado**.
+Cualquier `supabase.from(...)` dentro necesita el token, que necesita ese mismo
+candado → se queda esperando y no vuelve. A los 8 s ganaba el `Promise.race` del
+tiempo de espera.
+
+El disparador era `TOKEN_REFRESHED`: supabase-js renueva el token solo tras un
+rato de inactividad o al volver a enfocar la pestaña. De ahí el "de la nada".
+
+**2. Al fallar la lectura, se guardaba un usuario sin rol.**
+
+`loadProfileForUser` devolvía un objeto `base` construido solo con los datos del
+token —sin `role`, sin `is_active`, sin `user_type`— y el proveedor lo guardaba
+tal cual. `isAdmin = user?.role === 'admin'` pasaba a false.
+
+Como `is_active` quedaba `undefined` y no `false`, el gate de `/pending` no
+saltaba: por eso no te echaba de la aplicación, solo te quitaba el rol. Encaja
+exactamente con lo reportado.
+
+**Por qué se arreglaba al recargar:** `init()` corre fuera de cualquier callback
+de auth, sin candado de por medio, así que la consulta funcionaba.
+
+### La corrección
+
+| Antes | Ahora |
+|---|---|
+| `await supabase.from(...)` dentro del callback | `setTimeout(…, 0)` primero: devuelve el control y suelta el candado |
+| Releía el perfil en cada evento de auth | Solo en `USER_UPDATED` y en `SIGNED_IN` con **otra** persona. `TOKEN_REFRESHED` se ignora: es el token, no el usuario |
+| Al fallar devolvía usuario sin rol | Devuelve `null`, y `applyProfile` **conserva** el perfil que ya había |
+
+La regla nueva: **no leer el perfil no es lo mismo que leerlo y que no tenga
+permisos.** Un fallo de red pasajero ya no degrada a nadie.
+
+Añadido `userRef` para poder comparar la identidad dentro del callback sin
+resuscribirse en cada cambio, y limpiados los `console.log("[v0] …")` heredados,
+que además imprimían correo y rol en la consola en cada evento.
+
+### Alcance
+
+Solo `components/user-provider.tsx`. Revisado el resto: el único otro
+`onAuthStateChange` (`app/reset-password/page.tsx`) tiene un callback síncrono
+que no consulta la base de datos, así que no le afecta.
+
+**Nota de diseño:** con este cambio, si a alguien se le quita el rol de admin
+mientras tiene la pestaña abierta, la interfaz se lo sigue mostrando hasta que
+recargue. Es aceptable y deliberado: **la interfaz es una comodidad, quien manda
+es el RLS de la base de datos**, que rechazará cualquier operación que ya no le
+corresponda.
 
 ---
 

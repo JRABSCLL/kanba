@@ -12,7 +12,7 @@ interface User {
   // From profiles table
   is_active?: boolean
   role?: "member" | "admin"
-  user_type?: "admin" | "internal" | "agency"
+  user_type?: "internal" | "agency"
   agency_id?: string | null
 }
 
@@ -33,26 +33,29 @@ export function useUser() {
   return context
 }
 
-// Load the full profile for a given auth user with a hard timeout so a hung
-// network never keeps the UI in "loading forever".
-async function loadProfileForUser(authUser: any, timeoutMs = 8000): Promise<User> {
-  const base: User = {
+/** Lo que sabemos por el token, sin consultar la tabla profiles. */
+function baseUser(authUser: any): User {
+  return {
     id: authUser.id,
     email: authUser.email || "",
     full_name: authUser.user_metadata?.full_name,
     avatar_url: authUser.user_metadata?.avatar_url,
   }
+}
 
-  console.log("[v0] loadProfileForUser: start for", base.email)
+/**
+ * Lee la fila de `profiles` (rol, tipo, agencia).
+ *
+ * Devuelve `null` si no se pudo leer —red caída, tiempo agotado, error—, y esa
+ * distinción es la parte importante: antes devolvía un usuario "base" sin rol,
+ * que el proveedor guardaba tal cual. Resultado: cualquier fallo pasajero
+ * convertía a un admin en usuario común hasta recargar la página. No leer el
+ * perfil no es lo mismo que leerlo y que no tenga permisos.
+ */
+async function fetchProfile(authUser: any, timeoutMs = 8000): Promise<User | null> {
+  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs))
 
-  const timeout = new Promise<User>((resolve) => {
-    setTimeout(() => {
-      console.log("[v0] loadProfileForUser: TIMEOUT after", timeoutMs, "ms - returning base user")
-      resolve(base)
-    }, timeoutMs)
-  })
-
-  const fetchProfile = (async (): Promise<User> => {
+  const query = (async (): Promise<User | null> => {
     try {
       const { data, error } = await supabase
         .from("profiles")
@@ -60,17 +63,9 @@ async function loadProfileForUser(authUser: any, timeoutMs = 8000): Promise<User
         .eq("id", authUser.id)
         .maybeSingle()
 
-      if (error) {
-        console.log("[v0] loadProfileForUser: error", error.message)
-        return base
-      }
+      if (error || !data) return null
 
-      if (!data) {
-        console.log("[v0] loadProfileForUser: no profile row found")
-        return base
-      }
-
-      console.log("[v0] loadProfileForUser: success - is_active:", data.is_active, "role:", data.role, "user_type:", data.user_type)
+      const base = baseUser(authUser)
       return {
         ...base,
         full_name: data.full_name || base.full_name,
@@ -80,98 +75,114 @@ async function loadProfileForUser(authUser: any, timeoutMs = 8000): Promise<User
         user_type: (data.user_type as User["user_type"]) ?? undefined,
         agency_id: (data.agency_id as string | null) ?? null,
       }
-    } catch (err) {
-      console.log("[v0] loadProfileForUser: unexpected error", err)
-      return base
+    } catch {
+      return null
     }
   })()
 
-  return Promise.race([fetchProfile, timeout])
+  return Promise.race([query, timeout])
 }
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const mountedRef = useRef(true)
+  // Espejo del estado para poder consultarlo dentro de los callbacks de auth
+  // sin volver a suscribirse en cada cambio.
+  const userRef = useRef<User | null>(null)
+
+  const applyUser = (next: User | null) => {
+    if (!mountedRef.current) return
+    userRef.current = next
+    setUser(next)
+  }
+
+  /**
+   * Guarda el perfil recién leído, pero **nunca degrada** uno que ya teníamos.
+   * Si la lectura falló y ya sabíamos que esta persona es admin, se queda como
+   * admin: perder la conexión un momento no es perder el cargo.
+   */
+  const applyProfile = (authUser: any, profile: User | null) => {
+    if (profile) return applyUser(profile)
+
+    const current = userRef.current
+    if (current && current.id === authUser.id && current.role !== undefined) return
+
+    applyUser(baseUser(authUser))
+  }
 
   const refreshProfile = async () => {
-    console.log("[v0] refreshProfile: called")
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) {
-      console.log("[v0] refreshProfile: no session")
-      return
-    }
-    const full = await loadProfileForUser(session.user)
-    if (mountedRef.current) setUser(full)
+    if (!session?.user) return
+    applyProfile(session.user, await fetchProfile(session.user))
   }
 
   useEffect(() => {
     mountedRef.current = true
-    console.log("[v0] UserProvider: mount")
 
-    // Hard safety net: loading MUST end within 10 seconds no matter what.
-    // Prevents any "spinner forever" scenario if a fetch hangs.
+    // Red de seguridad: `loading` termina como máximo en 10 s pase lo que pase.
     const safety = setTimeout(() => {
-      if (mountedRef.current) {
-        console.log("[v0] UserProvider: SAFETY TIMEOUT (10s) - forcing loading=false")
-        setLoading(false)
-      }
+      if (mountedRef.current) setLoading(false)
     }, 10000)
 
     const init = async () => {
       try {
-        console.log("[v0] UserProvider.init: calling getSession")
-        // IMPORTANT: use getSession() not getUser()
-        //  - getSession() reads the token from localStorage synchronously (fast)
-        //  - getUser() makes an HTTP call that can hang on slow/flaky networks
-        const { data: { session }, error } = await supabase.auth.getSession()
-
-        if (error) {
-          console.log("[v0] UserProvider.init: getSession error", error.message)
-        }
+        // getSession() lee el token de localStorage (rápido). getUser() haría
+        // una petición HTTP que puede colgarse en redes malas.
+        const { data: { session } } = await supabase.auth.getSession()
 
         if (session?.user) {
-          console.log("[v0] UserProvider.init: session present for", session.user.email)
-          const full = await loadProfileForUser(session.user)
-          if (mountedRef.current) setUser(full)
+          applyProfile(session.user, await fetchProfile(session.user))
         } else {
-          console.log("[v0] UserProvider.init: no session")
-          if (mountedRef.current) setUser(null)
+          applyUser(null)
         }
-      } catch (err) {
-        console.log("[v0] UserProvider.init: unexpected error", err)
-        if (mountedRef.current) setUser(null)
+      } catch {
+        applyUser(null)
       } finally {
-        // CRITICAL: always end loading, no matter what happened above.
-        if (mountedRef.current) {
-          console.log("[v0] UserProvider.init: finally - loading=false")
-          setLoading(false)
-        }
+        if (mountedRef.current) setLoading(false)
         clearTimeout(safety)
       }
     }
 
     init()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("[v0] onAuthStateChange: event =", event, "session =", session ? "present" : "null")
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mountedRef.current) return
 
       if (event === "SIGNED_OUT" || !session?.user) {
-        setUser(null)
+        applyUser(null)
         setLoading(false)
         return
       }
 
-      const full = await loadProfileForUser(session.user)
-      if (mountedRef.current) {
-        setUser(full)
+      // Qué eventos obligan a releer el perfil:
+      //   TOKEN_REFRESHED  no. Es el token, no la persona. Es el que llegaba
+      //                    sin avisar tras unos minutos de inactividad.
+      //   SIGNED_IN        solo si de verdad cambió de usuario; supabase-js lo
+      //                    dispara también al volver a enfocar la pestaña.
+      //   INITIAL_SESSION  no. De eso ya se ocupa init().
+      const authUser = session.user
+      const cambioDePersona = userRef.current?.id !== authUser.id
+      const hayQueReleer =
+        event === "USER_UPDATED" || (event === "SIGNED_IN" && cambioDePersona)
+
+      if (!hayQueReleer) {
         setLoading(false)
+        return
       }
+
+      // IMPORTANTE: este callback se ejecuta con el candado de auth tomado.
+      // Llamar a supabase.from(...) aquí dentro se queda esperando ese mismo
+      // candado y se cuelga hasta agotar el tiempo. El setTimeout devuelve el
+      // control primero y suelta el candado.
+      setTimeout(async () => {
+        if (!mountedRef.current) return
+        applyProfile(authUser, await fetchProfile(authUser))
+        if (mountedRef.current) setLoading(false)
+      }, 0)
     })
 
     return () => {
-      console.log("[v0] UserProvider: unmount")
       mountedRef.current = false
       clearTimeout(safety)
       subscription.unsubscribe()
@@ -179,12 +190,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signOut = async () => {
-    console.log("[v0] signOut: called")
     try {
       await supabase.auth.signOut()
-      setUser(null)
-    } catch (error) {
-      console.log("[v0] signOut: error", error)
+      applyUser(null)
+    } catch {
+      // Aunque falle el cierre remoto, en esta pestaña ya no hay sesión.
+      applyUser(null)
     }
   }
 
