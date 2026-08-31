@@ -1063,6 +1063,7 @@ export function AgencyProductionModule() {
   }
 
   async function createDeliverable(title: string, stageId: string | null) {
+    if (!canCreateDeliverable) return toast.error("No tienes permiso para crear entregables")
     if (!selectedPlanId || !selectedAgencyId) return toast.error("Selecciona un plan primero")
     if (!title.trim()) return toast.error("El título es requerido")
     setCreatingDeliverable(true)
@@ -1395,6 +1396,7 @@ export function AgencyProductionModule() {
               onCreateDeliverable={(stageId: string | null) => { setCreateDeliverableStatus(stageId || ""); setCreateDeliverableOpen(true) }}
               updatingId={updatingDeliverableId}
               canManage={canManageProduction}
+              canCreate={canCreateDeliverable}
               canEditDeliverable={canEditDeliverable}
               onQuickStatus={quickSetStatus}
             />
@@ -1406,7 +1408,7 @@ export function AgencyProductionModule() {
               brandById={brandById}
               onEdit={startEditDeliverable}
               updatingId={updatingDeliverableId}
-              canManage={canManageProduction}
+              canEditDeliverable={canEditDeliverable}
               onStageChange={moveDeliverableToStage}
               onQuickStatus={quickSetStatus}
             />
@@ -1673,10 +1675,12 @@ interface PlanKanbanViewProps {
   updatingId: string | null
   canManage: boolean
   canEditDeliverable: (d: Deliverable) => boolean
+  /** Crear entregables. La agencia puede, aunque no gestione etapas. */
+  canCreate: boolean
   onQuickStatus?: (deliverable: Deliverable, status: string) => void
 }
 
-function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, onDeleteStage, onCreateStage, onCreateDeliverable, updatingId, canManage, canEditDeliverable, onQuickStatus }: PlanKanbanViewProps) {
+function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, onDeleteStage, onCreateStage, onCreateDeliverable, updatingId, canManage, canCreate, canEditDeliverable, onQuickStatus }: PlanKanbanViewProps) {
   // Group deliverables by stage_id
   const deliverablesByStage = useMemo(() => {
     const map = new Map<string | null, Deliverable[]>()
@@ -1749,15 +1753,15 @@ function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, 
                         </CardTitle>
                         <div className="flex items-center gap-1">
                           <Badge variant="secondary" className="text-xs">{items.length}</Badge>
-                          {canManage && (
+                          {(canManage || canCreate) && (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><MoreHorizontal className="h-3 w-3" /></Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => onCreateDeliverable(stage.id)}><Plus className="h-4 w-4 mr-2" />Agregar entrega</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => onEditStage(stage)}><Edit3 className="h-4 w-4 mr-2" />Editar etapa</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => onDeleteStage(stage.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar etapa</DropdownMenuItem>
+                                {canCreate && <DropdownMenuItem onClick={() => onCreateDeliverable(stage.id)}><Plus className="h-4 w-4 mr-2" />Agregar entrega</DropdownMenuItem>}
+                                {canManage && <DropdownMenuItem onClick={() => onEditStage(stage)}><Edit3 className="h-4 w-4 mr-2" />Editar etapa</DropdownMenuItem>}
+                                {canManage && <DropdownMenuItem onClick={() => onDeleteStage(stage.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />Eliminar etapa</DropdownMenuItem>}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           )}
@@ -1785,7 +1789,7 @@ function PlanKanbanView({ stages, deliverables, onDragEnd, onEdit, onEditStage, 
                           Arrastra entregas aquí
                         </div>
                       )}
-                      {canManage && (
+                      {canCreate && (
                         <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-foreground text-xs h-8" size="sm" onClick={() => onCreateDeliverable(stage.id)}>
                           <Plus className="h-3 w-3 mr-1" />Agregar
                         </Button>
@@ -1875,7 +1879,7 @@ function DeliverableCardContent({ deliverable, onEdit, updating, canManage, onQu
 }
 
 // Plan table view
-function PlanTableView({ stages, deliverables, brandById, onEdit, updatingId, canManage, onStageChange, onQuickStatus }: { stages: PlanStage[]; deliverables: Deliverable[]; brandById: any; onEdit: (d: Deliverable) => void; updatingId: string | null; canManage: boolean; onStageChange?: (id: string, stageId: string | null) => void; onQuickStatus?: (d: Deliverable, status: string) => void }) {
+function PlanTableView({ stages, deliverables, brandById, onEdit, updatingId, canEditDeliverable, onStageChange, onQuickStatus }: { stages: PlanStage[]; deliverables: Deliverable[]; brandById: any; onEdit: (d: Deliverable) => void; updatingId: string | null; canEditDeliverable: (d: Deliverable) => boolean; onStageChange?: (id: string, stageId: string | null) => void; onQuickStatus?: (d: Deliverable, status: string) => void }) {
   const stageById = useMemo(() => new Map(stages.map(s => [s.id, s])), [stages])
   const [search, setSearch] = useState("")
   const [stageFilter, setStageFilter] = useState("all")
@@ -1988,7 +1992,7 @@ function PlanTableView({ stages, deliverables, brandById, onEdit, updatingId, ca
                     <td className="py-2.5 pr-4">{d.deliverable_type}</td>
                     <td className="py-2.5 pr-4">{d.channel || "—"}</td>
                     <td className="py-2.5 pr-4">
-                      {canManage && onQuickStatus ? (
+                      {canEditDeliverable(d) && onQuickStatus ? (
                         <select className="h-8 rounded-md border border-input bg-background px-2 text-xs" value={d.status} disabled={updatingId === d.id} onChange={(e) => onQuickStatus(d, e.target.value)}>
                           {FLOW_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                         </select>
@@ -1997,7 +2001,7 @@ function PlanTableView({ stages, deliverables, brandById, onEdit, updatingId, ca
                       )}
                     </td>
                     <td className="py-2.5 pr-4">
-                      {canManage && onStageChange ? (
+                      {canEditDeliverable(d) && onStageChange ? (
                         <select className="h-8 rounded-md border border-input bg-background px-2 text-xs" value={d.stage_id ?? "none"} disabled={updatingId === d.id} onChange={(e) => onStageChange(d.id, e.target.value === "none" ? null : e.target.value)}>
                           <option value="none">Sin etapa</option>
                           {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -2025,7 +2029,7 @@ function PlanTableView({ stages, deliverables, brandById, onEdit, updatingId, ca
                       ) : "—"}
                     </td>
                     <td className="py-2.5 pr-3">
-                      {canManage && (
+                      {canEditDeliverable(d) && (
                         <Button size="sm" variant="outline" onClick={() => onEdit(d)}>
                           <Edit3 className="h-3 w-3" />
                         </Button>

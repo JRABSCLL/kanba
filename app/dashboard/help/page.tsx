@@ -449,6 +449,7 @@ const SECCIONES: Seccion[] = [
             <tbody className="[&_td]:p-2.5 [&_tr]:border-b [&_tr:last-child]:border-0">
               <tr><td>Las agencias</td><td>Todas</td><td>Solo la suya</td></tr>
               <tr><td>Planes y entregables</td><td>Todos</td><td>Solo los de su agencia</td></tr>
+              <tr><td>Crear entregables en su plan</td><td>Sí</td><td>Sí</td></tr>
               <tr><td>Crear agencias, planes y etapas</td><td>Sí</td><td>No</td></tr>
               <tr><td>Proyectos</td><td>Los suyos</td><td>Solo si le invitas</td></tr>
               <tr><td>Módulo Equipo</td><td>Sí</td><td>No</td></tr>
@@ -489,6 +490,7 @@ const SECCIONES: Seccion[] = [
               <tr><td>Crear agencias, marcas y planes</td><td>Sí</td><td>Sí</td><td>No</td></tr>
               <tr><td>Configurar etapas</td><td>Sí</td><td>Sí</td><td>No</td></tr>
               <tr><td>Eliminar un plan</td><td>Sí</td><td>Sí</td><td>No</td></tr>
+              <tr><td>Crear entregables</td><td>Sí</td><td>Sí</td><td>En su plan</td></tr>
               <tr><td>Mover entregables de etapa</td><td>Todos</td><td>Todos</td><td>Los suyos</td></tr>
               <tr><td>Editar entregables</td><td>Todos</td><td>Todos</td><td>Los suyos</td></tr>
               <tr><td>Ver otras agencias</td><td>Sí</td><td>Sí</td><td>No</td></tr>

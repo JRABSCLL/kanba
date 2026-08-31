@@ -207,6 +207,21 @@ entregables y cuántas etapas se lleva por delante. **No se puede deshacer.**
 Si solo quieres cerrar un plan sin perder el histórico, cambia su estado a
 archivado en vez de borrarlo.
 
+### Si eres de una agencia
+
+Ves **solo tu agencia**: tus planes y tus entregables, nada del resto. Dentro
+de un plan tuyo puedes:
+
+- **Crear entregables** con el botón *Agregar* al pie de cada columna.
+- **Arrastrarlos** entre etapas.
+- **Cambiar el estado** desde la etiqueta de la tarjeta.
+- **Editarlos**: título, tipo, canal, formato, prioridad, fecha límite y sobre
+  todo el **link** de la pieza entregada.
+- **Comentar** en cada uno, para pedir o justificar cambios.
+
+Lo que no puedes hacer: **borrar** entregables, y **crear o tocar** planes,
+etapas y agencias. Eso lo lleva el equipo del cliente.
+
 ### Moverte por el módulo
 
 En el panel ves todas tus agencias con su estado: **Va bien**, **Atención**,
@@ -343,6 +358,7 @@ agencias. Cámbialo cuando quieras: el acceso se ajusta al instante.
 | Entregables | Todos | Solo los de su agencia |
 | Módulo **Equipo** | Sí | No |
 | Proyectos | Los suyos | Solo si le invitas a uno |
+| Crear entregables | En cualquier plan | Solo en un plan de su agencia |
 
 Aparte del tipo está el **rol de admin**, que es independiente: se da con el
 botón *Hacer admin* y añade la gestión de usuarios. Un admin es siempre
@@ -359,7 +375,7 @@ interno.
 | Crear agencias, marcas y planes | Sí | Sí | No |
 | Configurar etapas | Sí | Sí | No |
 | Eliminar un plan | Sí | Sí | No |
-| Crear entregables | Sí | Sí | Sí (dentro de un plan) |
+| Crear entregables | Sí | Sí | Sí, dentro de un plan suyo |
 | Editar y mover entregables | Todos | Todos | Solo los de su agencia |
 | Eliminar entregables | Sí | Sí | No |
 | Ver otras agencias | Sí | Sí | No |

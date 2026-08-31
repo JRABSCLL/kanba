@@ -1,7 +1,76 @@
 # OrganizAPP — Contexto del Proyecto
 
 **Última actualización:** 2026-08-27  
-**Versión actual:** v0.22.0 — el admin dejaba de ser admin al rato
+**Versión actual:** v0.23.0 — la agencia ya puede crear sus entregables
+
+---
+
+## Cambios v0.23.0 (permisos de agencia: el cable que faltaba)
+
+### Tres sitios decían cosas distintas
+
+| | ¿La agencia puede crear entregables? |
+|---|---|
+| RLS (`deliverables_insert`) | **Sí** |
+| `MANUAL.md` | **Sí** |
+| La interfaz | **No** |
+
+La causa: `canCreateDeliverable = isAdmin || isInternal || isAgency` estaba
+definida en la línea 273, con comentario explicando el porqué… y **no se usaba
+en ningún sitio**. `PlanKanbanView` recibía `canManage={canManageProduction}`
+(admin/interno), y ese mismo permiso gobernaba tanto crear entregables como
+gestionar etapas.
+
+Decisión del cliente: **que la agencia pueda crear** dentro de un plan suyo.
+
+### Lo que se corrigió
+
+**1. Separado "crear entregable" de "gestionar etapas"** en `PlanKanbanView`.
+Antes eran el mismo `canManage`. Ahora:
+
+| Acción | Permiso |
+|---|---|
+| Agregar entrega (botón de la columna y menú) | `canCreate` → admin, interno **y agencia** |
+| Editar / eliminar etapa, agregar etapa | `canManage` → admin e interno |
+
+El menú de la etapa se muestra si tienes **alguno** de los dos, y cada opción se
+filtra por el suyo.
+
+**2. La vista Tabla tenía otro permiso que el Kanban.** `PlanTableView` recibía
+`canManage={canManageProduction}` para cambiar estado, cambiar etapa y editar.
+Resultado: un usuario de agencia podía hacer las tres cosas arrastrando en el
+Kanban, pero la Tabla le salía de solo lectura. Misma información, dos vistas,
+capacidades distintas.
+
+Ahora la Tabla usa `canEditDeliverable(d)` **por fila**, exactamente igual que el
+Kanban.
+
+**3. `createDeliverable` no comprobaba permisos.** Era la única función del
+módulo sin guarda. Añadida (el RLS ya la cubría, pero la interfaz debe fallar
+antes y con un mensaje claro).
+
+### Sin cambios en la base de datos
+
+El RLS ya permitía esto desde v0.19.0:
+
+```sql
+CREATE POLICY "deliverables_insert" ON public.production_deliverables
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    public.is_internal_or_admin()
+    OR agency_id = public.get_user_agency_id(auth.uid())
+  );
+```
+
+`createDeliverable` inserta con `agency_id = selectedAgencyId`, que para un
+usuario de agencia solo puede ser el de su propia agencia (no ve otras). El
+WITH CHECK pasa.
+
+### Documentación
+
+Tablas de permisos actualizadas en `MANUAL.md` y en la guía de la app, y sección
+nueva **"Si eres de una agencia"** en el manual, con lo que puede y no puede
+hacer un contacto externo.
 
 ---
 
