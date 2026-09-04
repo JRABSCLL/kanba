@@ -1,7 +1,80 @@
 # OrganizAPP — Contexto del Proyecto
 
-**Última actualización:** 2026-08-27  
-**Versión actual:** v0.23.0 — la agencia ya puede crear sus entregables
+**Última actualización:** 2026-09-04  
+**Versión actual:** v0.24.0 — bucle de redirección y páginas de error
+
+> **Fechas.** Las cabeceras de las versiones v0.22.0 y v0.23.0 decían
+> «2026-08-27» por error de redacción; las dos se subieron el **31 de agosto**.
+> Las fechas de esta tabla salen de `git log`, que es la fuente buena:
+>
+> | Versión | Commit | Fecha real |
+> |---|---|---|
+> | v0.20.0 | `7043ba0` | 25 ago 2026 |
+> | v0.21.0 | `100e39a` | 26 ago 2026 |
+> | v0.22.0 | `ab20bf1` | 31 ago 2026 |
+> | v0.23.0 | `ef7f2fa` | 31 ago 2026 |
+> | v0.24.0 | `1a79ce6` | 4 sept 2026 |
+
+---
+
+## Cambios v0.24.0 (bucle de redirección y páginas de error)
+
+### 🔴 Regresión introducida en v0.22.0
+
+Síntoma reportado: quien ya había entrado y volvía más tarde se encontraba una
+pantalla de error que parecía una caída del servidor de Vercel.
+
+**Causa.** Al montar, supabase-js dispara `INITIAL_SESSION` antes de que
+`init()` haya terminado de leer el perfil. El listener, para los eventos que no
+obligan a releer, hacía `setLoading(false)` en ese instante — con `user` todavía
+en `null`.
+
+```
+/dashboard   ve: loading=false, user=null   →  router.replace("/login")
+/login       ve: hay sesión válida          →  router.push("/dashboard")
+/dashboard   …                              →  bucle
+```
+
+Y como **no existía ninguna página de error**, Next.js mostraba su pantalla en
+crudo, que se lee como un fallo de servidor.
+
+Solo afectaba a quien volvía con la pestaña ya cerrada, porque es cuando el
+proveedor se monta de cero. Entrar recién desde `/login` no lo reproduce: por
+eso pasó la verificación de v0.22.0.
+
+**Corrección.** El listener ya no toca `loading` en ningún caso salvo el cierre
+de sesión. De la carga inicial se ocupa `init()`, que es quien sabe cuándo hay
+usuario. Ya no existe la ventana en la que coinciden «ya cargué» y «no hay
+nadie».
+
+### Páginas de error: no había ninguna
+
+Ninguno de los cuatro archivos que Next.js busca existía, así que cualquier 404
+o excepción caía en las pantallas por defecto: en inglés, sin marca y sin salida.
+
+| Archivo | Cuándo |
+|---|---|
+| `app/not-found.tsx` | 404 |
+| `app/error.tsx` | excepción en la aplicación |
+| `app/global-error.tsx` | fallo del layout raíz |
+| `app/dashboard/error.tsx` | error dentro del dashboard, conservando el menú |
+
+`global-error.tsx` no usa ni un componente ni un estilo del proyecto, a
+propósito: si ha fallado el layout raíz, eso es justo lo que puede estar roto.
+Lleva sus estilos en línea.
+
+Revisados además todos los `href` del código: **ningún enlace interno apunta a
+una ruta inexistente.**
+
+### Correo de verificación
+
+`signUp()` no pasaba `emailRedirectTo`, así que el enlace del correo volvía a la
+*Site URL* configurada en el panel de Supabase, que no tiene por qué ser el
+dominio desde el que se registró la persona (en una vista previa de Vercel no lo
+es). Ahora se ata a `window.location.origin`.
+
+**Pendiente de comprobar a mano** en Supabase → Authentication → URL
+Configuration: que *Site URL* y *Redirect URLs* apunten al dominio real.
 
 ---
 
