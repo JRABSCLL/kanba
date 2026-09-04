@@ -54,6 +54,11 @@ export default function SignUpPage() {
           data: {
             full_name: fullName,
           },
+          // Sin esto, el enlace del correo de verificación vuelve a la "Site URL"
+          // configurada en Supabase, que no tiene por qué ser este dominio (en
+          // vista previa de Vercel, por ejemplo, no lo es). Lo atamos al dominio
+          // desde el que se registró la persona.
+          emailRedirectTo: `${window.location.origin}/login`,
         },
       });
 

@@ -166,10 +166,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       const hayQueReleer =
         event === "USER_UPDATED" || (event === "SIGNED_IN" && cambioDePersona)
 
-      if (!hayQueReleer) {
-        setLoading(false)
-        return
-      }
+      // OJO: aquí NO se toca `loading`. Al montar, supabase-js dispara
+      // INITIAL_SESSION antes de que init() haya terminado de leer el perfil.
+      // Si en ese momento pusiéramos loading=false, el layout vería
+      // `loading === false` y `user === null` a la vez y mandaría a /login;
+      // /login ve que sí hay sesión y devuelve a /dashboard → bucle, y como no
+      // hay página de error, Next.js muestra su pantalla de fallo en crudo.
+      // Solo le pasaba a quien volvía con la pestaña ya cerrada, que es cuando
+      // el proveedor se monta de cero.
+      if (!hayQueReleer) return
 
       // IMPORTANTE: este callback se ejecuta con el candado de auth tomado.
       // Llamar a supabase.from(...) aquí dentro se queda esperando ese mismo
