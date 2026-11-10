@@ -1,5 +1,5 @@
-import { AgencyProductionModule } from "@/components/agency-production/agency-production-module"
+import { ProductionEntry } from "@/components/agency-production/production-entry"
 
 export default function AgencyProductionV2Page() {
-  return <AgencyProductionModule />
+  return <ProductionEntry />
 }
